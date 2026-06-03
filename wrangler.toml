@@ -1,0 +1,25 @@
+name = "builder"
+main = "src/index.ts"
+compatibility_date = "2025-05-01"
+compatibility_flags = ["nodejs_compat"]
+
+routes = [
+  { pattern = "builder.clydeford.net", custom_domain = true }
+]
+
+[vars]
+CF_ACCOUNT_ID = "5bdc4d7840e522355b86631e6b8fac2b"
+ZONE_ID = "68c212a7f233ee505d871e816da19600"
+SITE_ZONE = "clydeford.net"
+
+[[durable_objects.bindings]]
+name = "SITE_SESSION"
+class_name = "SiteSession"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["SiteSession"]
+
+[[kv_namespaces]]
+binding = "SITES"
+id = "PLACEHOLDER_REPLACE_AFTER_KV_CREATE"
