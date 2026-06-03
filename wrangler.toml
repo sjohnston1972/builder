@@ -22,4 +22,4 @@ new_sqlite_classes = ["SiteSession"]
 
 [[kv_namespaces]]
 binding = "SITES"
-id = "PLACEHOLDER_REPLACE_AFTER_KV_CREATE"
+id = "ab925a8b196a4be2bdbd2a8ea7bac00d"
