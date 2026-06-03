@@ -17,20 +17,21 @@ async function cf(env: Env, path: string, init: RequestInit): Promise<any> {
 }
 
 export async function deploySite(env: Env, name: string, script: string): Promise<string> {
+  const metadata: Record<string, unknown> = {
+    main_module: "index.mjs",
+    compatibility_date: COMPAT_DATE,
+    compatibility_flags: ["nodejs_compat"],
+  };
+  // Make the user's Anthropic key available to generated sites as
+  // env.ANTHROPIC_API_KEY, so they can build AI-powered features.
+  if (env.ANTHROPIC_API_KEY) {
+    metadata.bindings = [
+      { type: "secret_text", name: "ANTHROPIC_API_KEY", text: env.ANTHROPIC_API_KEY },
+    ];
+  }
+
   const form = new FormData();
-  form.set(
-    "metadata",
-    new Blob(
-      [
-        JSON.stringify({
-          main_module: "index.mjs",
-          compatibility_date: COMPAT_DATE,
-          compatibility_flags: ["nodejs_compat"],
-        }),
-      ],
-      { type: "application/json" },
-    ),
-  );
+  form.set("metadata", new Blob([JSON.stringify(metadata)], { type: "application/json" }));
   form.set(
     "index.mjs",
     new Blob([script], { type: "application/javascript+module" }),

@@ -34,6 +34,34 @@ test("uploads script then attaches domain, returns url", async () => {
   expect(calls[1].url).toContain("/accounts/acct1/workers/domains");
 });
 
+test("injects ANTHROPIC_API_KEY as a secret binding into the deployed worker", async () => {
+  let metadataText = "";
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: any, init: any) => {
+      const url = String(input);
+      if (init?.method === "PUT" && url.includes("/workers/scripts/")) {
+        metadataText = await (init.body.get("metadata") as Blob).text();
+      }
+      return new Response(JSON.stringify({ success: true, result: {} }), {
+        headers: { "content-type": "application/json" },
+      });
+    }),
+  );
+
+  await deploySite(
+    { ...env, ANTHROPIC_API_KEY: "sk-test-123" } as any,
+    "aibot",
+    "export default {}",
+  );
+
+  const meta = JSON.parse(metadataText);
+  const binding = (meta.bindings || []).find((b: any) => b.name === "ANTHROPIC_API_KEY");
+  expect(binding).toBeTruthy();
+  expect(binding.type).toBe("secret_text");
+  expect(binding.text).toBe("sk-test-123");
+});
+
 test("deleteSite removes the custom domain then the worker script", async () => {
   const calls: { url: string; method: string }[] = [];
   vi.stubGlobal(
