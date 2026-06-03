@@ -107,6 +107,8 @@ export default {
     if (delMatch && req.method === "DELETE") {
       const name = delMatch[1];
       await deleteSite(env, name);
+      // Wipe the Durable Object's stored conversation + script.
+      await env.SITE_SESSION.get(env.SITE_SESSION.idFromName(name)).clear();
       await env.SITES.delete(`site:${name}`);
       return json({ ok: true });
     }

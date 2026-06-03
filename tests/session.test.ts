@@ -44,3 +44,21 @@ test("turn streams text and deploys, persisting url", async () => {
     expect(state.messages.length).toBeGreaterThanOrEqual(2);
   });
 });
+
+test("clear() wipes all stored state", async () => {
+  const id = env.SITE_SESSION.idFromName("wipe-me");
+  const stub = env.SITE_SESSION.get(id);
+  await runInDurableObject(stub, async (_i: SiteSession, ctx) => {
+    await ctx.storage.put("messages", [{ role: "user", content: "hi" }]);
+    await ctx.storage.put("url", "https://wipe-me.clydeford.net");
+  });
+
+  await stub.clear();
+
+  await runInDurableObject(stub, async (instance: SiteSession) => {
+    const s = await instance.getState();
+    expect(s.messages.length).toBe(0);
+    expect(s.deployedUrl).toBe(null);
+    expect(s.currentScript).toBe(null);
+  });
+});

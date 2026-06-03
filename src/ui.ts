@@ -343,7 +343,7 @@ const APP_JS = `
   }
 
   function delSite(name){
-    if(!confirm('Delete '+name+'? This removes the worker and its '+name+'.'+ZONE+' domain.')) return;
+    if(!confirm('Delete '+name+' permanently?\\n\\nThis removes every trace: the worker, the '+name+'.'+ZONE+' domain and its DNS record, and all chat history. This cannot be undone.')) return;
     api('/api/sites/'+name,{method:'DELETE'}).then(function(){
       if(state.active===name){ state.active=null; hTitle.textContent='No site selected'; hUrl.textContent='pick or create a site →';
         addr.innerHTML='https://<b>—</b>'; setPreview(null); input.disabled=true; send.disabled=true; setPill('','idle'); }

@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { deploySite } from "../src/deploy";
+import { deploySite, deleteSite } from "../src/deploy";
 
 const env = {
   CF_ACCOUNT_ID: "acct1",
@@ -32,6 +32,38 @@ test("uploads script then attaches domain, returns url", async () => {
   expect(calls[0].url).toContain("/accounts/acct1/workers/scripts/mysite");
   expect(calls[0].method).toBe("PUT");
   expect(calls[1].url).toContain("/accounts/acct1/workers/domains");
+});
+
+test("deleteSite removes the custom domain then the worker script", async () => {
+  const calls: { url: string; method: string }[] = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: any, init: any) => {
+      const url = String(input);
+      calls.push({ url, method: init?.method });
+      // GET domains lookup returns one matching domain.
+      if (init?.method === "GET" && url.includes("/workers/domains")) {
+        return new Response(
+          JSON.stringify({ success: true, result: [{ id: "dom1", hostname: "mysite.clydeford.net" }] }),
+          { headers: { "content-type": "application/json" } },
+        );
+      }
+      return new Response(JSON.stringify({ success: true, result: {} }), {
+        headers: { "content-type": "application/json" },
+      });
+    }),
+  );
+
+  await deleteSite(env, "mysite");
+
+  // Looks up the domain, deletes it by id, then deletes the script.
+  expect(calls.some((c) => c.method === "GET" && c.url.includes("/workers/domains"))).toBe(true);
+  expect(
+    calls.some((c) => c.method === "DELETE" && c.url.includes("/workers/domains/dom1")),
+  ).toBe(true);
+  expect(
+    calls.some((c) => c.method === "DELETE" && c.url.includes("/workers/scripts/mysite")),
+  ).toBe(true);
 });
 
 test("throws with Cloudflare error message on failure", async () => {

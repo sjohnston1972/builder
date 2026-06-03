@@ -60,6 +60,28 @@ export async function deploySite(env: Env, name: string, script: string): Promis
 }
 
 export async function deleteSite(env: Env, name: string): Promise<void> {
+  const hostname = `${name}.${env.SITE_ZONE}`;
+
+  // 1. Remove the custom domain binding (DNS record + edge cert).
+  try {
+    const domains = await cf(
+      env,
+      `/accounts/${env.CF_ACCOUNT_ID}/workers/domains?zone_id=${env.ZONE_ID}&hostname=${hostname}`,
+      { method: "GET" },
+    );
+    const domain = Array.isArray(domains)
+      ? domains.find((d: any) => d.hostname === hostname) ?? domains[0]
+      : null;
+    if (domain?.id) {
+      await cf(env, `/accounts/${env.CF_ACCOUNT_ID}/workers/domains/${domain.id}`, {
+        method: "DELETE",
+      });
+    }
+  } catch {
+    // No domain attached (or already removed) — keep going.
+  }
+
+  // 2. Delete the worker script itself.
   await cf(env, `/accounts/${env.CF_ACCOUNT_ID}/workers/scripts/${name}`, {
     method: "DELETE",
   }).catch(() => {});

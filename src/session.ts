@@ -10,6 +10,11 @@ interface State {
 }
 
 export class SiteSession extends DurableObject<Env> {
+  // Wipe all stored chat history + script for this site (used on delete).
+  async clear(): Promise<void> {
+    await this.ctx.storage.deleteAll();
+  }
+
   async getState(): Promise<State> {
     return {
       messages: (await this.ctx.storage.get<StoredMessage[]>("messages")) ?? [],
