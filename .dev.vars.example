@@ -1,0 +1,15 @@
+# Worker runtime secrets for local dev (`npm run dev`). Copy to `.dev.vars` and fill in.
+# `.dev.vars` is gitignored — never commit real values.
+
+# Cloudflare API token used BY THE WORKER to deploy child sites
+# (Workers Scripts: Edit, Workers Routes/Custom Domains: Edit, Zone: Read).
+CF_API_TOKEN=
+
+# Anthropic API key (Claude). Also injected into generated sites as a secret.
+ANTHROPIC_API_KEY=
+
+# Password required to log in to the builder.
+APP_PASSWORD=
+
+# Long random string used to HMAC-sign the session cookie.
+SESSION_SECRET=
