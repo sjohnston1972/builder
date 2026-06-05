@@ -327,7 +327,7 @@ export function appPage(): string {
 const APP_JS = `
 (function(){
   var ZONE = 'clydeford.net';
-  var state = { active:null, busy:false, hasSites:false };
+  var state = { active:null, busy:false };
   var $ = function(id){ return document.getElementById(id); };
   function isMobile(){ return window.matchMedia('(max-width:720px)').matches; }
 
@@ -351,13 +351,12 @@ const APP_JS = `
     stepHint.classList.add('on');
     stepHint.innerHTML = n===1 ? 'Step <b>1</b> — name your site' : 'Step <b>2</b> — describe what to build';
   }
+  // Pulse step 1 (name) until named, then step 2 (brief) until described — whenever the form is empty.
   function refreshOnboarding(){
-    if(state.hasSites){ setStep(0); return; }
     setStep(!$('name').value.trim() ? 1 : (!specEl.value.trim() ? 2 : 0));
   }
 
   function renderSites(sites){
-    state.hasSites = sites.length>0;
     refreshOnboarding();
     sites.sort(function(a,b){return (b.updatedAt||0)-(a.updatedAt||0);});
     if(!sites.length){ siteList.innerHTML='<div class="empty">No sites yet. Name one and describe it above to forge your first.</div>'; return; }
@@ -544,6 +543,7 @@ const APP_JS = `
     });
   })();
 
+  refreshOnboarding(); // show step 1 immediately, before the sites list loads
   loadSites();
 })();
 `;
