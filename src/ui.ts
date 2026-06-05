@@ -221,13 +221,14 @@ export function appPage(): string {
   /* ---- build-complete announcement ---- */
   @keyframes annPop{0%{transform:scale(.95);opacity:0}60%{transform:scale(1.02)}100%{transform:scale(1);opacity:1}}
   @keyframes annSpin{to{transform:rotate(360deg)}}
-  .announce{align-self:flex-start;max-width:82%;display:flex;align-items:center;gap:14px;
+  .announce{align-self:flex-start;max-width:min(94%,440px);display:flex;align-items:center;gap:14px;
     background:linear-gradient(135deg,rgba(255,138,61,.18),rgba(255,138,61,.04));
     border:1px solid rgba(255,138,61,.4);border-radius:16px;padding:14px 16px;
     animation:annPop .5s cubic-bezier(.2,.8,.2,1) both}
   .announce .spark{font-size:22px;color:var(--accent);line-height:1;animation:annSpin 3.5s linear infinite}
   .announce .body{flex:1;min-width:0}
-  .announce .title{font-family:var(--disp);font-weight:800;font-size:16px;letter-spacing:-.01em;color:var(--text)}
+  .announce .title{font-family:var(--disp);font-weight:800;font-size:16px;letter-spacing:-.01em;color:var(--text);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .announce .url{font-family:var(--mono);font-size:11.5px;color:var(--accent2);margin-top:2px;
     white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .announce .open{background:var(--accent);color:#1a1205;font-family:var(--disp);font-weight:700;font-size:13.5px;
