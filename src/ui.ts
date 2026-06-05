@@ -193,8 +193,12 @@ export function appPage(): string {
   /* ---- chat ---- */
   main{display:flex;flex-direction:column;min-width:0;min-height:0;background:var(--bg)}
   .chead{display:flex;align-items:center;gap:14px;padding:16px 24px;border-bottom:1px solid var(--line)}
-  .chead .t{font-family:var(--disp);font-weight:700;font-size:17px;letter-spacing:-.01em}
-  .chead .u{font-family:var(--mono);font-size:11.5px;color:var(--muted)}
+  .chead-id{flex:1;min-width:0}
+  .chead .t{font-family:var(--disp);font-weight:700;font-size:17px;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .chead .u{font-family:var(--mono);font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .chead-sites{display:none;font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);
+    border:1px solid var(--line);padding:7px 11px;border-radius:8px;white-space:nowrap;transition:color .15s,border-color .15s}
+  .chead-sites:hover{color:var(--accent);border-color:var(--accent)}
   .backbtn{display:none;place-items:center;font-size:20px;color:var(--muted);padding:2px 9px;border-radius:9px;line-height:1}
   .backbtn:hover{color:var(--text);background:var(--panel2)}
   .openlink{margin-left:auto;font-family:var(--mono);font-size:11px;letter-spacing:.03em;color:var(--accent2);border:1px solid var(--line);padding:6px 12px;border-radius:99px;text-decoration:none;white-space:nowrap;transition:border-color .15s,color .15s}
@@ -285,7 +289,9 @@ export function appPage(): string {
     body.show-chat main{display:flex}
     #previewpane,#divider{display:none}
     .backbtn{display:grid}
-    .chead{padding:13px 14px}
+    .chead-sites{display:inline-flex;align-items:center}
+    .chead .pill{display:none}
+    .chead{padding:13px 14px;overflow:hidden}
     #chat{padding:20px 16px}
     .composer{padding:13px 14px calc(13px + env(safe-area-inset-bottom))}
     .new{padding:16px 16px 18px}
@@ -321,7 +327,8 @@ export function appPage(): string {
   <main>
     <div class="chead">
       <button class="backbtn" id="backBtn" title="Back to sites">←</button>
-      <div><div class="t" id="hTitle">No site selected</div><div class="u" id="hUrl">pick or create a site →</div></div>
+      <div class="chead-id"><div class="t" id="hTitle">No site selected</div><div class="u" id="hUrl">pick or create a site →</div></div>
+      <button class="chead-sites" id="cheadSites" type="button" title="Switch site">sites</button>
       <a class="openlink hidden" id="openLink" target="_blank" rel="noopener">open ↗</a>
       <div class="pill" id="pill"><span class="d"></span><span id="pillTxt">idle</span></div>
     </div>
@@ -590,6 +597,11 @@ const APP_JS = `
   specEl.addEventListener('input', refreshOnboarding);
   $('refresh').addEventListener('click', function(){ if(state.active) setPreview('https://'+state.active+'.'+ZONE); });
   $('backBtn').addEventListener('click', function(){ document.body.classList.remove('show-chat'); }); // mobile: back to sites
+  $('cheadSites').addEventListener('click', function(e){ // mobile: open sites list from the chat header
+    e.stopPropagation();
+    document.body.classList.remove('show-chat');
+    sitesPanel.classList.add('open'); sitesBtn.classList.add('open');
+  });
   sitesBtn.addEventListener('click', function(e){ e.stopPropagation(); var open=sitesPanel.classList.toggle('open'); sitesBtn.classList.toggle('open', open); });
   document.addEventListener('click', function(e){
     if(!sitesPanel.classList.contains('open')) return;
