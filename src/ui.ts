@@ -64,8 +64,13 @@ export function loginPage(error?: string): string {
 
 export function appPage(): string {
   return `<!doctype html><html lang="en"><head>${HEAD}<title>forge</title><style>${RESET}
-  body{display:grid;grid-template-columns:300px 1fr 42%;height:100vh;overflow:hidden}
-  @media(max-width:1100px){body{grid-template-columns:260px 1fr}#previewpane{display:none}}
+  body{display:grid;grid-template-columns:300px 1fr 6px var(--preview-w,42%);height:100vh;overflow:hidden}
+  @media(max-width:1100px){body{grid-template-columns:260px 1fr}#previewpane,#divider{display:none}}
+
+  /* ---- draggable chat/preview divider ---- */
+  #divider{cursor:col-resize;background:var(--line);position:relative;transition:background .15s}
+  #divider::after{content:'';position:absolute;inset:0 -5px}
+  #divider:hover,#divider.drag{background:var(--accent)}
 
   /* ---- sidebar ---- */
   aside{background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
@@ -199,6 +204,8 @@ export function appPage(): string {
       <div class="hint">enter to send · shift+enter for newline</div>
     </div>
   </main>
+
+  <div class="divider" id="divider" title="Drag to resize · double-click to reset"></div>
 
   <section id="previewpane">
     <div class="browser">
@@ -382,6 +389,40 @@ const APP_JS = `
   input.addEventListener('keydown', function(e){ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); var v=input.value.trim(); if(v){ input.value=''; autoGrow(); sendMessage(v); } } });
   $('name').addEventListener('input', function(){ this.value=this.value.toLowerCase().replace(/[^a-z0-9-]/g,'-'); });
   $('refresh').addEventListener('click', function(){ if(state.active) setPreview('https://'+state.active+'.'+ZONE); });
+
+  // ---- draggable chat/preview divider ----
+  (function(){
+    var divider=$('divider'), root=document.documentElement, KEY='forge_preview_w';
+    var saved=localStorage.getItem(KEY);
+    if(saved) root.style.setProperty('--preview-w', saved);
+    function clamp(w){
+      var min=320, max=window.innerWidth-560;
+      if(max<min) max=min;
+      return Math.max(min, Math.min(max, w));
+    }
+    var dragging=false;
+    function onMove(e){
+      if(!dragging) return;
+      root.style.setProperty('--preview-w', clamp(window.innerWidth-e.clientX)+'px');
+    }
+    function onUp(){
+      if(!dragging) return;
+      dragging=false; divider.classList.remove('drag');
+      document.body.style.userSelect=''; preview.style.pointerEvents='';
+      localStorage.setItem(KEY, root.style.getPropertyValue('--preview-w')||'42%');
+    }
+    divider.addEventListener('mousedown', function(e){
+      dragging=true; divider.classList.add('drag');
+      document.body.style.userSelect='none';
+      preview.style.pointerEvents='none'; // let mousemove through the iframe
+      e.preventDefault();
+    });
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    divider.addEventListener('dblclick', function(){
+      root.style.removeProperty('--preview-w'); localStorage.removeItem(KEY);
+    });
+  })();
 
   loadSites();
 })();
