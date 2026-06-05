@@ -7,6 +7,7 @@ interface State {
   messages: StoredMessage[];
   currentScript: string | null;
   deployedUrl: string | null;
+  status: "idle" | "building";
 }
 
 export class SiteSession extends DurableObject<Env> {
@@ -20,6 +21,7 @@ export class SiteSession extends DurableObject<Env> {
       messages: (await this.ctx.storage.get<StoredMessage[]>("messages")) ?? [],
       currentScript: (await this.ctx.storage.get<string>("script")) ?? null,
       deployedUrl: (await this.ctx.storage.get<string>("url")) ?? null,
+      status: (await this.ctx.storage.get<"idle" | "building">("status")) ?? "idle",
     };
   }
 
@@ -27,6 +29,11 @@ export class SiteSession extends DurableObject<Env> {
     const { name, message } = await req.json<{ name: string; message: string }>();
     const state = await this.getState();
     state.messages.push({ role: "user", content: message });
+    // Persist the user's message and a "building" flag up front, so a client that
+    // reconnects mid-build (mobile app-switch, screen sleep, reload) can see the
+    // turn is in progress and poll for the result.
+    await this.ctx.storage.put("messages", state.messages);
+    await this.ctx.storage.put("status", "building");
 
     const env = this.env;
     const ctx = this.ctx;
@@ -68,6 +75,9 @@ export class SiteSession extends DurableObject<Env> {
         } catch (err: any) {
           send({ type: "error", message: String(err?.message ?? err) });
         } finally {
+          // Mark the turn done regardless of how it ended, so reconnecting clients
+          // stop polling and render the final state.
+          await ctx.storage.put("status", "idle");
           try {
             controller.close();
           } catch {

@@ -97,8 +97,8 @@ export default {
     if (histMatch && req.method === "GET") {
       const name = histMatch[1];
       const id = env.SITE_SESSION.idFromName(name);
-      const { messages } = await env.SITE_SESSION.get(id).getState();
-      return json({ messages });
+      const { messages, status, deployedUrl } = await env.SITE_SESSION.get(id).getState();
+      return json({ messages, status, url: deployedUrl });
     }
 
     const chatMatch = path.match(/^\/api\/sites\/([a-z0-9-]+)\/chat$/);

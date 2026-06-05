@@ -80,6 +80,29 @@ test("history returns the DO's stored messages", async () => {
   expect(messages[1].content).toBe("(deployed)");
 });
 
+test("history reports build status for reconnecting clients", async () => {
+  const cookie = await login();
+  await SELF.fetch("https://builder.clydeford.net/api/sites", {
+    method: "POST",
+    headers: { cookie, "content-type": "application/json" },
+    body: JSON.stringify({ name: "status-site" }),
+  });
+
+  const stub = env.SITE_SESSION.get(env.SITE_SESSION.idFromName("status-site"));
+  await runInDurableObject(stub, async (_i: SiteSession, ctx) => {
+    await ctx.storage.put("status", "building");
+    await ctx.storage.put("url", "https://status-site.clydeford.net");
+  });
+
+  const res = await SELF.fetch(
+    "https://builder.clydeford.net/api/sites/status-site/history",
+    { headers: { cookie } },
+  );
+  const body = await res.json<any>();
+  expect(body.status).toBe("building");
+  expect(body.url).toBe("https://status-site.clydeford.net");
+});
+
 test("history is empty for a site that was never chatted", async () => {
   const cookie = await login();
   const res = await SELF.fetch(

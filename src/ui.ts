@@ -373,7 +373,7 @@ const APP_JS = `
   var ZONE = 'clydeford.net';
   var BUILD_VERBS = ['Forging the worker','Compiling your code','Bundling modules',
     'Wiring up routes','Shipping to the edge','Spinning up the runtime','Warming the cache'];
-  var state = { active:null, busy:false };
+  var state = { active:null, busy:false, building:false, streamLost:false };
   var $ = function(id){ return document.getElementById(id); };
 
   function confetti(){
@@ -422,9 +422,11 @@ const APP_JS = `
     setStep(!$('name').value.trim() ? 1 : (!specEl.value.trim() ? 2 : 0));
   }
 
+  var recoveredOnce=false;
   function renderSites(sites){
     refreshOnboarding();
     siteCount.textContent = sites.length;
+    if(!recoveredOnce){ recoveredOnce=true; maybeRecoverOnLoad(sites); }
     sites.sort(function(a,b){return (b.updatedAt||0)-(a.updatedAt||0);});
     if(!sites.length){ siteList.innerHTML='<div class="empty">No sites yet. Name one and describe it above to forge your first.</div>'; return; }
     siteList.innerHTML='';
@@ -442,6 +444,7 @@ const APP_JS = `
 
   function selectSite(name, url){
     state.active=name;
+    try{ localStorage.setItem('forge_active', name); }catch(e){} // remember for reload recovery
     hTitle.textContent=name; hUrl.textContent=url;
     openLink.href=url; openLink.classList.remove('hidden');
     document.body.classList.add('show-chat'); // mobile: switch to chat view
@@ -465,31 +468,87 @@ const APP_JS = `
     });
   }
 
-  // Mobile recovery: if the app was backgrounded mid-build the SSE stream dies and
-  // the UI can be left stuck. On return, resync from the server's saved history
-  // (the build itself completes server-side regardless of the dropped connection).
-  function resyncActive(){
-    if(!state.active) return;
-    stopVerbs();
-    state.busy=false; send.disabled=false; input.disabled=false;
-    setPill('','ready');
-    chat.innerHTML='';
-    loadHistory(state.active);
+  // The build runs server-side regardless of the client connection. These helpers
+  // let a client that lost the stream (mobile app-switch, screen sleep, reload)
+  // rejoin: load saved history, and if a build is still in progress, poll until done.
+  var pollTimer=null;
+  function pollStop(){ if(pollTimer){ clearTimeout(pollTimer); pollTimer=null; } }
+
+  function finalizeIdle(d){
+    pollStop(); stopVerbs();
+    state.building=false; state.busy=false; state.streamLost=false;
+    send.disabled=false; input.disabled=false;
+    if(pill.className.indexOf('live')<0) setPill('','ready');
+    if(d && d.url) setPreview(d.url);
   }
 
   function loadHistory(name){
+    pollStop();
     api('/api/sites/'+name+'/history')
       .then(function(r){ return r.ok ? r.json() : {messages:[]}; })
       .then(function(d){
         if(state.active!==name) return; // user switched sites while loading
         renderHistory((d&&d.messages)||[]);
-        sysLine('▸ session opened for '+name+'.'+ZONE);
+        if(d && d.status==='building'){
+          // A turn is still running server-side — show it and poll to completion.
+          state.building=true; state.busy=true; send.disabled=true; input.disabled=true;
+          setPill('work','building');
+          var el=document.createElement('div'); el.className='deploy';
+          el.innerHTML='<span class="spin"></span> finishing your build…';
+          chat.appendChild(el);
+          pollStatus(name);
+        } else {
+          sysLine('▸ session opened for '+name+'.'+ZONE);
+          finalizeIdle(d);
+        }
         chat.scrollTop=chat.scrollHeight;
       })
       .catch(function(){
         if(state.active!==name) return;
         sysLine('▸ session opened for '+name+'.'+ZONE);
       });
+  }
+
+  function pollStatus(name){
+    pollStop();
+    var tries=0;
+    (function loop(){
+      pollTimer=setTimeout(function(){
+        if(state.active!==name) return;
+        api('/api/sites/'+name+'/history')
+          .then(function(r){ return r.json(); })
+          .then(function(d){
+            if(state.active!==name) return;
+            if(d.status==='building' && ++tries<60){ loop(); return; } // ~150s max
+            chat.innerHTML='';
+            renderHistory(d.messages||[]);
+            sysLine(d.status==='building' ? '▸ still building — tap a site again to refresh' : '▸ build finished');
+            finalizeIdle(d);
+            chat.scrollTop=chat.scrollHeight;
+          })
+          .catch(function(){ if(++tries<60){ loop(); } else { finalizeIdle(null); } });
+      }, 2500);
+    })();
+  }
+
+  // Came back to the app (foreground / bfcache restore) after losing a build's stream.
+  function recover(){
+    if(!state.active || !state.building) return;
+    chat.innerHTML='';
+    loadHistory(state.active);
+  }
+
+  // On first load, if the last-open site has a build in progress, rejoin it.
+  function maybeRecoverOnLoad(sites){
+    var last; try{ last=localStorage.getItem('forge_active'); }catch(e){}
+    if(!last || state.active) return;
+    var match=sites.filter(function(s){ return s.name===last; })[0];
+    if(!match) return;
+    api('/api/sites/'+last+'/history').then(function(r){ return r.json(); }).then(function(d){
+      if(d && d.status==='building' && !state.active){
+        selectSite(match.name, match.url||('https://'+match.name+'.'+ZONE));
+      }
+    }).catch(function(){});
   }
 
   function setPreview(url){
@@ -526,7 +585,7 @@ const APP_JS = `
 
   function sendMessage(text){
     if(state.busy||!state.active) return;
-    state.busy=true; send.disabled=true; input.disabled=true;
+    state.busy=true; state.building=true; state.streamLost=false; send.disabled=true; input.disabled=true;
     var ub=bubble('user','you'); ub.textContent=text;
     var bb=bubble('bot','forge'); bb.classList.add('cursor');
     setPill('work','thinking');
@@ -576,10 +635,11 @@ const APP_JS = `
             confetti();
             setTimeout(function(){ setPreview(ev.url); }, 1200);
           }
-          else if(ev.type==='error'){ stopVerbs(); setPill('','error'); var eb=bubble('sys',''); eb.style.color='var(--err)'; eb.textContent='▲ '+ev.message; }
+          else if(ev.type==='error'){ stopVerbs(); state.building=false; setPill('','error'); var eb=bubble('sys',''); eb.style.color='var(--err)'; eb.textContent='▲ '+ev.message; }
         }
         function finish(){
           stopVerbs();
+          state.building=false; state.streamLost=false;
           bb.classList.remove('cursor');
           if(!bb.textContent) bb.textContent='(done)';
           if(pill.className.indexOf('live')<0) setPill('','ready');
@@ -588,7 +648,14 @@ const APP_JS = `
         }
         return pump();
       })
-      .catch(function(){ stopVerbs(); bb.classList.remove('cursor'); setPill('','error'); state.busy=false; send.disabled=false; input.disabled=false; });
+      .catch(function(){
+        // The stream died (often a mobile app-switch / screen sleep). The build keeps
+        // running server-side — rejoin and poll for the result instead of giving up.
+        stopVerbs(); bb.classList.remove('cursor');
+        state.streamLost=true;
+        if(state.building && state.active){ recover(); }
+        else { setPill('','error'); state.busy=false; send.disabled=false; input.disabled=false; }
+      });
   }
 
   function delSite(name){
@@ -611,10 +678,12 @@ const APP_JS = `
   specEl.addEventListener('input', refreshOnboarding);
   $('refresh').addEventListener('click', function(){ if(state.active) setPreview('https://'+state.active+'.'+ZONE); });
   document.addEventListener('visibilitychange', function(){
-    // Came back to a build that was running when we left → its stream is dead; resync.
-    if(document.visibilityState==='visible' && state.busy && isMobile() && state.active){
-      setTimeout(resyncActive, 1300); // let the server finish persisting, then pull saved history
-    }
+    // Returned to foreground after the stream was lost (backgrounding aborts it) → rejoin.
+    if(document.visibilityState==='visible' && state.active && state.building && state.streamLost) recover();
+  });
+  window.addEventListener('pageshow', function(e){
+    // Restored from bfcache/freeze (mobile screen sleep / back-forward) → the stream is dead; rejoin.
+    if(e.persisted && state.active && state.building) recover();
   });
   $('backBtn').addEventListener('click', function(){ document.body.classList.remove('show-chat'); }); // mobile: back to sites
   $('cheadSites').addEventListener('click', function(e){ // mobile: open sites list from the chat header
