@@ -81,7 +81,7 @@ export function appPage(): string {
   .urlrow input{flex:1;min-width:0;background:none;border:none;color:var(--text);padding:11px 12px;font-size:13px;outline:none;font-family:var(--mono)}
   .urlrow .zone{font-family:var(--mono);font-size:12px;color:var(--muted);padding:0 12px 0 0;white-space:nowrap}
   textarea#spec{width:100%;background:var(--bg);border:1px solid var(--line);color:var(--text);border-radius:10px;
-    padding:11px 12px;font-size:13.5px;line-height:1.5;resize:vertical;min-height:70px;outline:none}
+    padding:11px 12px;font-size:13.5px;line-height:1.5;resize:vertical;min-height:280px;outline:none}
   .urlrow input:focus,textarea#spec:focus{border-color:var(--accent)}
   .urlrow:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px var(--glow)}
   textarea#spec:focus{box-shadow:0 0 0 3px var(--glow)}
