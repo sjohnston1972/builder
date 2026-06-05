@@ -544,7 +544,8 @@ const APP_JS = `
           bb.classList.remove('cursor');
           if(!bb.textContent) bb.textContent='(done)';
           if(pill.className.indexOf('live')<0) setPill('','ready');
-          state.busy=false; send.disabled=false; input.disabled=false; input.focus();
+          state.busy=false; send.disabled=false; input.disabled=false;
+          if(!isMobile()) input.focus(); // mobile: don't pop the keyboard after a turn finishes
         }
         return pump();
       })
