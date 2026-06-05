@@ -254,6 +254,7 @@ const APP_JS = `
   var ZONE = 'clydeford.net';
   var state = { active:null, busy:false };
   var $ = function(id){ return document.getElementById(id); };
+  function isMobile(){ return window.matchMedia('(max-width:720px)').matches; }
 
   var chat=$('chat'), input=$('input'), send=$('send'), pill=$('pill'), pillTxt=$('pillTxt');
   var hTitle=$('hTitle'), hUrl=$('hUrl'), addr=$('addr'), preview=$('preview'), noprev=$('noprev');
@@ -294,7 +295,7 @@ const APP_JS = `
     chat.innerHTML='';
     setPreview(url);
     loadSites();
-    input.focus();
+    if(!isMobile()) input.focus(); // mobile: don't pop the keyboard on site select
     loadHistory(name);
   }
 
