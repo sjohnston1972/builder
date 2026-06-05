@@ -134,7 +134,8 @@ export function appPage(): string {
 
   /* ---- sidebar ---- */
   aside{background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
-  .brand{padding:20px 22px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:10px;position:relative}
+  .brand{padding:20px 22px 16px;border-bottom:1px solid var(--line);display:grid;grid-template-columns:1fr auto;align-items:center;column-gap:10px;row-gap:5px;position:relative}
+  .brand .sub{grid-column:1 / -1}
   .brand-actions{display:flex;align-items:center;gap:8px}
   .sites-btn{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);
     border:1px solid var(--line);padding:6px 10px;border-radius:8px;display:flex;align-items:center;gap:6px;white-space:nowrap;transition:color .15s,border-color .15s}
@@ -294,11 +295,12 @@ export function appPage(): string {
 
   <aside>
     <div class="brand">
-      <div><div class="mark">⬡ for<b>ge</b></div><div class="sub">clydeford · worker builder</div></div>
+      <div class="mark">⬡ for<b>ge</b></div>
       <div class="brand-actions">
         <button class="sites-btn" id="sitesBtn" type="button">sites <span class="cnt" id="siteCount">0</span></button>
         <a class="logout" href="/logout" title="Log out">log out</a>
       </div>
+      <div class="sub">clydeford · worker builder</div>
       <div class="sites-panel" id="sitesPanel">
         <h2>your sites</h2>
         <div id="siteList"><div class="empty">No sites yet. Name one and describe it above to forge your first.</div></div>
