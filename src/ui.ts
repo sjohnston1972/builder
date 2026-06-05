@@ -390,6 +390,9 @@ const APP_JS = `
     document.body.appendChild(box);
     setTimeout(function(){ box.remove(); }, 1200);
   }
+
+  var verbTimer=null;
+  function stopVerbs(){ if(verbTimer){ clearInterval(verbTimer); verbTimer=null; } }
   function isMobile(){ return window.matchMedia('(max-width:720px)').matches; }
 
   var chat=$('chat'), input=$('input'), send=$('send'), pill=$('pill'), pillTxt=$('pillTxt');
@@ -462,6 +465,18 @@ const APP_JS = `
     });
   }
 
+  // Mobile recovery: if the app was backgrounded mid-build the SSE stream dies and
+  // the UI can be left stuck. On return, resync from the server's saved history
+  // (the build itself completes server-side regardless of the dropped connection).
+  function resyncActive(){
+    if(!state.active) return;
+    stopVerbs();
+    state.busy=false; send.disabled=false; input.disabled=false;
+    setPill('','ready');
+    chat.innerHTML='';
+    loadHistory(state.active);
+  }
+
   function loadHistory(name){
     api('/api/sites/'+name+'/history')
       .then(function(r){ return r.ok ? r.json() : {messages:[]}; })
@@ -515,8 +530,7 @@ const APP_JS = `
     var ub=bubble('user','you'); ub.textContent=text;
     var bb=bubble('bot','forge'); bb.classList.add('cursor');
     setPill('work','thinking');
-    var deployEl=null, verbTimer=null;
-    function stopVerbs(){ if(verbTimer){ clearInterval(verbTimer); verbTimer=null; } }
+    var deployEl=null;
 
     api('/api/sites/'+state.active+'/chat',{method:'POST',body:JSON.stringify({message:text})})
       .then(function(r){
@@ -596,6 +610,12 @@ const APP_JS = `
   $('name').addEventListener('input', function(){ this.value=this.value.toLowerCase().replace(/[^a-z0-9-]/g,'-'); refreshOnboarding(); });
   specEl.addEventListener('input', refreshOnboarding);
   $('refresh').addEventListener('click', function(){ if(state.active) setPreview('https://'+state.active+'.'+ZONE); });
+  document.addEventListener('visibilitychange', function(){
+    // Came back to a build that was running when we left → its stream is dead; resync.
+    if(document.visibilityState==='visible' && state.busy && isMobile() && state.active){
+      setTimeout(resyncActive, 1300); // let the server finish persisting, then pull saved history
+    }
+  });
   $('backBtn').addEventListener('click', function(){ document.body.classList.remove('show-chat'); }); // mobile: back to sites
   $('cheadSites').addEventListener('click', function(e){ // mobile: open sites list from the chat header
     e.stopPropagation();

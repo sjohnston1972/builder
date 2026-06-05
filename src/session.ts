@@ -32,10 +32,21 @@ export class SiteSession extends DurableObject<Env> {
     const ctx = this.ctx;
     const encoder = new TextEncoder();
 
+    // If the client navigates away (mobile app-switch, tab close), the response
+    // stream is cancelled. We keep building and persisting regardless — `send`
+    // becomes a no-op once the client is gone — so the deploy completes and the
+    // conversation is saved. The user sees the result when they reopen the site.
+    let clientGone = false;
     const stream = new ReadableStream({
       async start(controller) {
-        const send = (obj: unknown) =>
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
+        const send = (obj: unknown) => {
+          if (clientGone) return;
+          try {
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
+          } catch {
+            clientGone = true;
+          }
+        };
         let assistantText = "";
         try {
           for await (const ev of streamTurn(env, state.messages, state.currentScript)) {
@@ -57,8 +68,15 @@ export class SiteSession extends DurableObject<Env> {
         } catch (err: any) {
           send({ type: "error", message: String(err?.message ?? err) });
         } finally {
-          controller.close();
+          try {
+            controller.close();
+          } catch {
+            /* already closed by client cancel */
+          }
         }
+      },
+      cancel() {
+        clientGone = true; // stop streaming, but the build above runs to completion
       },
     });
 
