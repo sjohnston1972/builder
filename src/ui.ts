@@ -216,6 +216,28 @@ export function appPage(): string {
   @keyframes spin{to{transform:rotate(360deg)}}
   .deploy.done{color:var(--ok)}
   .deploy.done a{color:var(--ok);text-decoration:underline}
+  .deploy .verb{transition:opacity .18s}
+
+  /* ---- build-complete announcement ---- */
+  @keyframes annPop{0%{transform:scale(.95);opacity:0}60%{transform:scale(1.02)}100%{transform:scale(1);opacity:1}}
+  @keyframes annSpin{to{transform:rotate(360deg)}}
+  .announce{align-self:flex-start;max-width:82%;display:flex;align-items:center;gap:14px;
+    background:linear-gradient(135deg,rgba(255,138,61,.18),rgba(255,138,61,.04));
+    border:1px solid rgba(255,138,61,.4);border-radius:16px;padding:14px 16px;
+    animation:annPop .5s cubic-bezier(.2,.8,.2,1) both}
+  .announce .spark{font-size:22px;color:var(--accent);line-height:1;animation:annSpin 3.5s linear infinite}
+  .announce .body{flex:1;min-width:0}
+  .announce .title{font-family:var(--disp);font-weight:800;font-size:16px;letter-spacing:-.01em;color:var(--text)}
+  .announce .url{font-family:var(--mono);font-size:11.5px;color:var(--accent2);margin-top:2px;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .announce .open{background:var(--accent);color:#1a1205;font-family:var(--disp);font-weight:700;font-size:13.5px;
+    padding:10px 16px;border-radius:10px;text-decoration:none;white-space:nowrap;transition:filter .15s,transform .1s}
+  .announce .open:hover{filter:brightness(1.08)}.announce .open:active{transform:translateY(1px)}
+
+  /* ---- confetti burst ---- */
+  .confetti{position:fixed;inset:0;pointer-events:none;z-index:60;overflow:hidden}
+  .confetti i{position:absolute;top:46%;left:50%;width:9px;height:9px;border-radius:2px;animation:conf 1s ease-out forwards}
+  @keyframes conf{0%{opacity:1;transform:translate(-50%,-50%)}100%{opacity:0;transform:translate(calc(-50% + var(--x)),calc(-50% + var(--y))) rotate(var(--r))}}
   .cursor::after{content:'▋';color:var(--accent);animation:blink 1s step-end infinite;margin-left:1px}
   @keyframes blink{50%{opacity:0}}
 
@@ -327,8 +349,25 @@ export function appPage(): string {
 const APP_JS = `
 (function(){
   var ZONE = 'clydeford.net';
+  var BUILD_VERBS = ['Forging the worker','Compiling your code','Bundling modules',
+    'Wiring up routes','Shipping to the edge','Spinning up the runtime','Warming the cache'];
   var state = { active:null, busy:false };
   var $ = function(id){ return document.getElementById(id); };
+
+  function confetti(){
+    var colors=['#ff8a3d','#ffd6a0','#7ee0a8','#e9e5db'];
+    var box=document.createElement('div'); box.className='confetti';
+    for(var i=0;i<26;i++){
+      var p=document.createElement('i');
+      p.style.background=colors[i%colors.length];
+      p.style.setProperty('--x',((Math.random()*2-1)*260)+'px');
+      p.style.setProperty('--y',((Math.random()*2-1)*220-40)+'px');
+      p.style.setProperty('--r',(Math.random()*540-270)+'deg');
+      box.appendChild(p);
+    }
+    document.body.appendChild(box);
+    setTimeout(function(){ box.remove(); }, 1200);
+  }
   function isMobile(){ return window.matchMedia('(max-width:720px)').matches; }
 
   var chat=$('chat'), input=$('input'), send=$('send'), pill=$('pill'), pillTxt=$('pillTxt');
@@ -450,7 +489,8 @@ const APP_JS = `
     var ub=bubble('user','you'); ub.textContent=text;
     var bb=bubble('bot','forge'); bb.classList.add('cursor');
     setPill('work','thinking');
-    var deployEl=null;
+    var deployEl=null, verbTimer=null;
+    function stopVerbs(){ if(verbTimer){ clearInterval(verbTimer); verbTimer=null; } }
 
     api('/api/sites/'+state.active+'/chat',{method:'POST',body:JSON.stringify({message:text})})
       .then(function(r){
@@ -470,14 +510,36 @@ const APP_JS = `
         }
         function handle(ev){
           if(ev.type==='text'){ bb.textContent+=ev.text; chat.scrollTop=chat.scrollHeight; }
-          else if(ev.type==='deploying'){ setPill('work','deploying'); deployEl=document.createElement('div');
-            deployEl.className='deploy'; deployEl.innerHTML='<span class="spin"></span> shipping worker to the edge…'; chat.appendChild(deployEl); chat.scrollTop=chat.scrollHeight; }
-          else if(ev.type==='deployed'){ setPill('live','live');
-            if(deployEl){ deployEl.className='deploy done'; deployEl.innerHTML='✔ deployed → <a href="'+ev.url+'" target="_blank" rel="noopener">'+ev.url.replace('https://','')+'</a>'; }
-            setTimeout(function(){ setPreview(ev.url); }, 1200); }
-          else if(ev.type==='error'){ setPill('','error'); var eb=bubble('sys',''); eb.style.color='var(--err)'; eb.textContent='▲ '+ev.message; }
+          else if(ev.type==='deploying'){
+            setPill('work','building');
+            deployEl=document.createElement('div'); deployEl.className='deploy';
+            deployEl.innerHTML='<span class="spin"></span> <span class="verb">'+BUILD_VERBS[0]+'…</span>';
+            chat.appendChild(deployEl); chat.scrollTop=chat.scrollHeight;
+            var vi=0;
+            verbTimer=setInterval(function(){
+              vi=(vi+1)%BUILD_VERBS.length;
+              var v=deployEl&&deployEl.querySelector('.verb'); if(!v) return;
+              v.style.opacity='0';
+              setTimeout(function(){ v.textContent=BUILD_VERBS[vi]+'…'; v.style.opacity='1'; }, 180);
+            }, 1100);
+          }
+          else if(ev.type==='deployed'){
+            stopVerbs(); setPill('live','live');
+            var host=ev.url.replace('https://','');
+            if(deployEl){
+              deployEl.className='announce';
+              deployEl.innerHTML='<span class="spark">✦</span>'
+                +'<div class="body"><div class="title">Your site is live</div>'
+                +'<div class="url">'+host+'</div></div>'
+                +'<a class="open" href="'+ev.url+'" target="_blank" rel="noopener">Open ↗</a>';
+            }
+            confetti();
+            setTimeout(function(){ setPreview(ev.url); }, 1200);
+          }
+          else if(ev.type==='error'){ stopVerbs(); setPill('','error'); var eb=bubble('sys',''); eb.style.color='var(--err)'; eb.textContent='▲ '+ev.message; }
         }
         function finish(){
+          stopVerbs();
           bb.classList.remove('cursor');
           if(!bb.textContent) bb.textContent='(done)';
           if(pill.className.indexOf('live')<0) setPill('','ready');
@@ -485,7 +547,7 @@ const APP_JS = `
         }
         return pump();
       })
-      .catch(function(){ bb.classList.remove('cursor'); setPill('','error'); state.busy=false; send.disabled=false; input.disabled=false; });
+      .catch(function(){ stopVerbs(); bb.classList.remove('cursor'); setPill('','error'); state.busy=false; send.disabled=false; input.disabled=false; });
   }
 
   function delSite(name){
