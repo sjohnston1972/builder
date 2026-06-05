@@ -1,5 +1,5 @@
 import type { Env, SiteRecord } from "./types";
-import { appPage, loginPage } from "./ui";
+import { appPage, loginPage, landingPage } from "./ui";
 import {
   checkPassword,
   signSession,
@@ -48,14 +48,16 @@ export default {
       });
     }
 
+    // Public landing page for logged-out visitors; the app itself once authed.
+    if (path === "/") {
+      const html = (await authed(req, env)) ? appPage() : landingPage();
+      return new Response(html, { headers: { "content-type": "text/html" } });
+    }
+
     const ok = await authed(req, env);
     if (!ok) {
       if (path.startsWith("/api/")) return json({ error: "unauthorized" }, 401);
       return new Response(null, { status: 302, headers: { location: "/login" } });
-    }
-
-    if (path === "/") {
-      return new Response(appPage(), { headers: { "content-type": "text/html" } });
     }
 
     if (path === "/api/sites" && req.method === "GET") {

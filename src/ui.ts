@@ -31,6 +31,66 @@ a{color:var(--accent)}
 .mono{font-family:var(--mono)}
 `;
 
+export function landingPage(): string {
+  return `<!doctype html><html lang="en"><head>${HEAD}<title>forge · build a live website by chatting</title><style>${RESET}
+  body{min-height:100dvh;display:flex;flex-direction:column}
+  .wrap{width:min(92vw,920px);margin:0 auto;padding:0 4px}
+  nav{display:flex;align-items:center;justify-content:space-between;padding:26px 0 0}
+  nav .mark{font-family:var(--disp);font-weight:800;font-size:23px;letter-spacing:-.02em}
+  nav .mark b{color:var(--accent)}
+  nav a.enter{font-family:var(--mono);font-size:12px;color:var(--accent2);text-decoration:none;border:1px solid var(--line);
+    padding:9px 16px;border-radius:99px;transition:border-color .15s,color .15s}
+  nav a.enter:hover{border-color:var(--accent);color:var(--accent)}
+
+  .hero{flex:1;display:flex;flex-direction:column;justify-content:center;padding:60px 0 40px}
+  .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--muted);margin-bottom:20px}
+  h1{font-family:var(--disp);font-weight:800;font-size:clamp(40px,7vw,76px);line-height:1.02;letter-spacing:-.03em;max-width:14ch}
+  h1 b{color:var(--accent)}
+  .lede{font-size:clamp(16px,2.2vw,20px);line-height:1.6;color:var(--muted);max-width:56ch;margin:24px 0 38px}
+  .lede b{color:var(--text);font-weight:600}
+  .cta{display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+  .cta a.primary{background:var(--accent);color:#1a1205;font-family:var(--disp);font-weight:700;font-size:16px;
+    padding:15px 26px;border-radius:12px;text-decoration:none;transition:filter .15s,transform .1s}
+  .cta a.primary:hover{filter:brightness(1.08)}.cta a.primary:active{transform:translateY(1px)}
+  .cta .note{font-family:var(--mono);font-size:11.5px;color:var(--muted)}
+
+  .steps{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;padding:10px 0 70px}
+  @media(max-width:720px){.steps{grid-template-columns:1fr}h1{max-width:none}.hero{padding:40px 0 28px}}
+  .step{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:22px 22px 24px}
+  .step .n{font-family:var(--disp);font-weight:800;font-size:15px;color:var(--accent);
+    width:30px;height:30px;border-radius:9px;border:1px solid var(--line);display:grid;place-items:center;margin-bottom:14px}
+  .step h3{font-family:var(--disp);font-weight:700;font-size:17px;letter-spacing:-.01em;margin-bottom:7px}
+  .step p{font-size:13.5px;line-height:1.6;color:var(--muted)}
+  .step p .mono{color:var(--accent2)}
+  footer{border-top:1px solid var(--line);padding:18px 0 26px;font-family:var(--mono);font-size:11px;color:var(--muted);
+    display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px}
+  </style></head><body>
+    <div class="wrap">
+      <nav>
+        <div class="mark">⬡ for<b>ge</b></div>
+        <a class="enter" href="/login">Enter →</a>
+      </nav>
+      <section class="hero">
+        <div class="eyebrow">worker site builder</div>
+        <h1>Build a live website by just <b>chatting</b>.</h1>
+        <p class="lede">Describe what you want and Forge writes it, ships it to its own
+          <b>Cloudflare&nbsp;Worker</b> on a real URL, and shows you the result. Don't like something?
+          Just say so — it rebuilds and redeploys while you watch. No code, no setup, no deploy step.</p>
+        <div class="cta">
+          <a class="primary" href="/login">Enter the forge →</a>
+          <span class="note">one passphrase · ships to &lt;name&gt;.clydeford.net</span>
+        </div>
+      </section>
+      <section class="steps">
+        <div class="step"><div class="n">1</div><h3>Name it</h3><p>Pick a name — your site goes live at <span class="mono">&lt;name&gt;.clydeford.net</span>.</p></div>
+        <div class="step"><div class="n">2</div><h3>Describe it</h3><p>Write a short brief of the site you want. A landing page, a tool, an AI-powered app — whatever.</p></div>
+        <div class="step"><div class="n">3</div><h3>Ship &amp; refine</h3><p>Forge deploys it in seconds, then keeps editing it live as you chat. Your conversation is saved for next time.</p></div>
+      </section>
+      <footer><span>⬡ forge · clydeford.net</span><span>built on Cloudflare Workers</span></footer>
+    </div>
+  </body></html>`;
+}
+
 export function loginPage(error?: string): string {
   return `<!doctype html><html lang="en"><head>${HEAD}<title>forge · access</title><style>${RESET}
   body{display:grid;place-items:center}
@@ -94,6 +154,14 @@ export function appPage(): string {
     padding:11px;border-radius:10px;transition:filter .15s,transform .1s;display:flex;align-items:center;justify-content:center;gap:7px}
   .forge-btn:hover{filter:brightness(1.08)}.forge-btn:active{transform:translateY(1px)}
   .forge-btn[disabled]{opacity:.45;cursor:not-allowed}
+
+  /* ---- onboarding step pulses ---- */
+  @keyframes stepPulse{0%,100%{box-shadow:0 0 0 0 var(--glow)}50%{box-shadow:0 0 0 6px var(--glow)}}
+  .pulse-step{animation:stepPulse 1.7s ease-in-out infinite;border-color:var(--accent)!important}
+  .stephint{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--accent2);margin:-2px 0 12px;display:none}
+  .stephint.on{display:block}
+  .stephint b{color:var(--accent)}
 
   .sites{flex:1;overflow:auto;padding:12px 12px 20px}
   .sites h2{font-family:var(--mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);margin:8px 8px 10px}
@@ -193,6 +261,7 @@ export function appPage(): string {
     <div class="brand"><div class="mark">⬡ for<b>ge</b></div><div class="sub">clydeford · worker builder</div></div>
     <form class="new" id="new-site" autocomplete="off">
       <h2>+ new site</h2>
+      <div class="stephint" id="stepHint"></div>
       <div class="field urlrow">
         <input id="name" placeholder="my-site" maxlength="63" />
         <span class="zone">.clydeford.net</span>
@@ -252,13 +321,14 @@ export function appPage(): string {
 const APP_JS = `
 (function(){
   var ZONE = 'clydeford.net';
-  var state = { active:null, busy:false };
+  var state = { active:null, busy:false, hasSites:false };
   var $ = function(id){ return document.getElementById(id); };
   function isMobile(){ return window.matchMedia('(max-width:720px)').matches; }
 
   var chat=$('chat'), input=$('input'), send=$('send'), pill=$('pill'), pillTxt=$('pillTxt');
   var hTitle=$('hTitle'), hUrl=$('hUrl'), addr=$('addr'), preview=$('preview'), noprev=$('noprev');
   var siteList=$('siteList'), welcome=$('welcome'), openLink=$('openLink');
+  var stepHint=$('stepHint'), specEl=$('spec'), nameWrap=document.querySelector('#new-site .urlrow');
 
   function setPill(kind, txt){ pill.className='pill'+(kind?(' '+kind):''); pillTxt.textContent=txt; }
 
@@ -267,7 +337,22 @@ const APP_JS = `
   function loadSites(){
     api('/api/sites').then(function(r){return r.json();}).then(renderSites);
   }
+  // Guide first-time users: pulse the name field (step 1), then the brief (step 2).
+  function setStep(n){
+    nameWrap.classList.toggle('pulse-step', n===1);
+    specEl.classList.toggle('pulse-step', n===2);
+    if(!n){ stepHint.classList.remove('on'); return; }
+    stepHint.classList.add('on');
+    stepHint.innerHTML = n===1 ? 'Step <b>1</b> — name your site' : 'Step <b>2</b> — describe what to build';
+  }
+  function refreshOnboarding(){
+    if(state.hasSites){ setStep(0); return; }
+    setStep(!$('name').value.trim() ? 1 : (!specEl.value.trim() ? 2 : 0));
+  }
+
   function renderSites(sites){
+    state.hasSites = sites.length>0;
+    refreshOnboarding();
     sites.sort(function(a,b){return (b.updatedAt||0)-(a.updatedAt||0);});
     if(!sites.length){ siteList.innerHTML='<div class="empty">No sites yet. Name one and describe it above to forge your first.</div>'; return; }
     siteList.innerHTML='';
@@ -414,7 +499,8 @@ const APP_JS = `
   send.addEventListener('click', function(){ var v=input.value.trim(); if(v){ input.value=''; autoGrow(); sendMessage(v); } });
   input.addEventListener('input', autoGrow);
   input.addEventListener('keydown', function(e){ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); var v=input.value.trim(); if(v){ input.value=''; autoGrow(); sendMessage(v); } } });
-  $('name').addEventListener('input', function(){ this.value=this.value.toLowerCase().replace(/[^a-z0-9-]/g,'-'); });
+  $('name').addEventListener('input', function(){ this.value=this.value.toLowerCase().replace(/[^a-z0-9-]/g,'-'); refreshOnboarding(); });
+  specEl.addEventListener('input', refreshOnboarding);
   $('refresh').addEventListener('click', function(){ if(state.active) setPreview('https://'+state.active+'.'+ZONE); });
   $('backBtn').addEventListener('click', function(){ document.body.classList.remove('show-chat'); }); // mobile: back to sites
 

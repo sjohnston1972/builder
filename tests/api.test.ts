@@ -12,10 +12,17 @@ async function login(): Promise<string> {
   return res.headers.get("set-cookie")!.split(";")[0];
 }
 
-test("unauthed root redirects to login", async () => {
+test("unauthed root serves the public landing page", async () => {
   const res = await SELF.fetch("https://builder.clydeford.net/", { redirect: "manual" });
-  expect(res.status).toBe(302);
-  expect(res.headers.get("location")).toBe("/login");
+  expect(res.status).toBe(200);
+  const html = await res.text();
+  expect(html).toContain("Build a live website by just");
+  expect(html).toContain('href="/login"'); // CTA into the app
+});
+
+test("unauthed api still 401s", async () => {
+  const res = await SELF.fetch("https://builder.clydeford.net/api/sites");
+  expect(res.status).toBe(401);
 });
 
 test("login then create + list site", async () => {
