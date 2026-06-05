@@ -20,6 +20,15 @@ test("unauthed root serves the public landing page", async () => {
   expect(html).toContain('href="/login"'); // CTA into the app
 });
 
+test("logout clears the session cookie and redirects home", async () => {
+  const res = await SELF.fetch("https://builder.clydeford.net/logout", {
+    redirect: "manual",
+  });
+  expect(res.status).toBe(302);
+  expect(res.headers.get("location")).toBe("/");
+  expect(res.headers.get("set-cookie")).toContain("Max-Age=0");
+});
+
 test("unauthed api still 401s", async () => {
   const res = await SELF.fetch("https://builder.clydeford.net/api/sites");
   expect(res.status).toBe(401);

@@ -48,6 +48,10 @@ export function cookieHeader(token: string): string {
   return `${COOKIE}=${token}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=604800`;
 }
 
+export function clearCookieHeader(): string {
+  return `${COOKIE}=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0`;
+}
+
 export function readCookie(req: Request): string | null {
   const raw = req.headers.get("Cookie") || "";
   const m = raw.match(new RegExp(`${COOKIE}=([^;]+)`));

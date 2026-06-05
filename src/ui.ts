@@ -134,7 +134,10 @@ export function appPage(): string {
 
   /* ---- sidebar ---- */
   aside{background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
-  .brand{padding:20px 22px 16px;border-bottom:1px solid var(--line)}
+  .brand{padding:20px 22px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .brand a.logout{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);
+    text-decoration:none;border:1px solid var(--line);padding:6px 10px;border-radius:8px;white-space:nowrap;transition:color .15s,border-color .15s}
+  .brand a.logout:hover{color:var(--accent);border-color:var(--accent)}
   .brand .mark{font-family:var(--disp);font-weight:800;font-size:23px;letter-spacing:-.02em}
   .brand .mark b{color:var(--accent)}
   .brand .sub{font-family:var(--mono);font-size:9.5px;color:var(--muted);letter-spacing:.2em;text-transform:uppercase;margin-top:3px}
@@ -258,7 +261,10 @@ export function appPage(): string {
   </style></head><body>
 
   <aside>
-    <div class="brand"><div class="mark">⬡ for<b>ge</b></div><div class="sub">clydeford · worker builder</div></div>
+    <div class="brand">
+      <div><div class="mark">⬡ for<b>ge</b></div><div class="sub">clydeford · worker builder</div></div>
+      <a class="logout" href="/logout" title="Log out">log out</a>
+    </div>
     <form class="new" id="new-site" autocomplete="off">
       <h2>+ new site</h2>
       <div class="stephint" id="stepHint"></div>

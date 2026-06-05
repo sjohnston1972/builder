@@ -6,6 +6,7 @@ import {
   verifySession,
   readCookie,
   cookieHeader,
+  clearCookieHeader,
 } from "./auth";
 import { sanitizeName, isValidName } from "./names";
 import { deleteSite } from "./deploy";
@@ -45,6 +46,13 @@ export default {
       return new Response(loginPage("Wrong password"), {
         status: 401,
         headers: { "content-type": "text/html" },
+      });
+    }
+
+    if (path === "/logout") {
+      return new Response(null, {
+        status: 302,
+        headers: { location: "/", "set-cookie": clearCookieHeader() },
       });
     }
 
