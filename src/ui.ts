@@ -114,6 +114,11 @@ export function appPage(): string {
   .chead{display:flex;align-items:center;gap:14px;padding:16px 24px;border-bottom:1px solid var(--line)}
   .chead .t{font-family:var(--disp);font-weight:700;font-size:17px;letter-spacing:-.01em}
   .chead .u{font-family:var(--mono);font-size:11.5px;color:var(--muted)}
+  .backbtn{display:none;place-items:center;font-size:20px;color:var(--muted);padding:2px 9px;border-radius:9px;line-height:1}
+  .backbtn:hover{color:var(--text);background:var(--panel2)}
+  .openlink{margin-left:auto;font-family:var(--mono);font-size:11px;letter-spacing:.03em;color:var(--accent2);border:1px solid var(--line);padding:6px 12px;border-radius:99px;text-decoration:none;white-space:nowrap;transition:border-color .15s,color .15s}
+  .openlink:hover{border-color:var(--accent);color:var(--accent)}
+  .openlink.hidden{display:none}
   .pill{margin-left:auto;font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;
     padding:5px 11px;border-radius:99px;border:1px solid var(--line);color:var(--muted);display:flex;align-items:center;gap:7px}
   .pill .d{width:6px;height:6px;border-radius:50%;background:var(--muted)}
@@ -166,6 +171,22 @@ export function appPage(): string {
   .noprev{position:absolute;inset:0;display:grid;place-items:center;background:var(--panel);color:var(--muted);text-align:center;padding:30px}
   .noprev .g{font-family:var(--disp);font-size:42px;opacity:.3;margin-bottom:14px}
   .noprev p{font-size:13px;line-height:1.6;font-family:var(--mono)}
+
+  /* ---- mobile: two-view switch (sites <-> chat), no preview ---- */
+  @media(max-width:720px){
+    body{display:block;height:100dvh;overflow:hidden}
+    aside{height:100dvh;width:100%;border-right:none}
+    main{display:none;height:100dvh;width:100%}
+    body.show-chat aside{display:none}
+    body.show-chat main{display:flex}
+    #previewpane,#divider{display:none}
+    .backbtn{display:grid}
+    .chead{padding:13px 14px}
+    #chat{padding:20px 16px}
+    .composer{padding:13px 14px calc(13px + env(safe-area-inset-bottom))}
+    .new{padding:16px 16px 18px}
+    .msg{max-width:90%}
+  }
   </style></head><body>
 
   <aside>
@@ -187,7 +208,9 @@ export function appPage(): string {
 
   <main>
     <div class="chead">
+      <button class="backbtn" id="backBtn" title="Back to sites">←</button>
       <div><div class="t" id="hTitle">No site selected</div><div class="u" id="hUrl">pick or create a site →</div></div>
+      <a class="openlink hidden" id="openLink" target="_blank" rel="noopener">open ↗</a>
       <div class="pill" id="pill"><span class="d"></span><span id="pillTxt">idle</span></div>
     </div>
     <div id="chat">
@@ -234,7 +257,7 @@ const APP_JS = `
 
   var chat=$('chat'), input=$('input'), send=$('send'), pill=$('pill'), pillTxt=$('pillTxt');
   var hTitle=$('hTitle'), hUrl=$('hUrl'), addr=$('addr'), preview=$('preview'), noprev=$('noprev');
-  var siteList=$('siteList'), welcome=$('welcome');
+  var siteList=$('siteList'), welcome=$('welcome'), openLink=$('openLink');
 
   function setPill(kind, txt){ pill.className='pill'+(kind?(' '+kind):''); pillTxt.textContent=txt; }
 
@@ -262,6 +285,8 @@ const APP_JS = `
   function selectSite(name, url){
     state.active=name;
     hTitle.textContent=name; hUrl.textContent=url;
+    openLink.href=url; openLink.classList.remove('hidden');
+    document.body.classList.add('show-chat'); // mobile: switch to chat view
     addr.innerHTML='https://<b>'+name+'.'+ZONE+'</b>';
     input.disabled=false; send.disabled=false; input.placeholder='Tell Forge what to build or change…';
     setPill('','ready');
@@ -376,7 +401,8 @@ const APP_JS = `
     if(!confirm('Delete '+name+' permanently?\\n\\nThis removes every trace: the worker, the '+name+'.'+ZONE+' domain and its DNS record, and all chat history. This cannot be undone.')) return;
     api('/api/sites/'+name,{method:'DELETE'}).then(function(){
       if(state.active===name){ state.active=null; hTitle.textContent='No site selected'; hUrl.textContent='pick or create a site →';
-        addr.innerHTML='https://<b>—</b>'; setPreview(null); input.disabled=true; send.disabled=true; setPill('','idle'); }
+        addr.innerHTML='https://<b>—</b>'; setPreview(null); input.disabled=true; send.disabled=true; setPill('','idle');
+        openLink.classList.add('hidden'); document.body.classList.remove('show-chat'); }
       loadSites();
     });
   }
@@ -389,6 +415,7 @@ const APP_JS = `
   input.addEventListener('keydown', function(e){ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); var v=input.value.trim(); if(v){ input.value=''; autoGrow(); sendMessage(v); } } });
   $('name').addEventListener('input', function(){ this.value=this.value.toLowerCase().replace(/[^a-z0-9-]/g,'-'); });
   $('refresh').addEventListener('click', function(){ if(state.active) setPreview('https://'+state.active+'.'+ZONE); });
+  $('backBtn').addEventListener('click', function(){ document.body.classList.remove('show-chat'); }); // mobile: back to sites
 
   // ---- draggable chat/preview divider ----
   (function(){
