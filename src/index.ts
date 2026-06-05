@@ -83,6 +83,14 @@ export default {
       return json(rec);
     }
 
+    const histMatch = path.match(/^\/api\/sites\/([a-z0-9-]+)\/history$/);
+    if (histMatch && req.method === "GET") {
+      const name = histMatch[1];
+      const id = env.SITE_SESSION.idFromName(name);
+      const { messages } = await env.SITE_SESSION.get(id).getState();
+      return json({ messages });
+    }
+
     const chatMatch = path.match(/^\/api\/sites\/([a-z0-9-]+)\/chat$/);
     if (chatMatch && req.method === "POST") {
       const name = chatMatch[1];

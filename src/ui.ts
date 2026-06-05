@@ -260,10 +260,33 @@ const APP_JS = `
     setPill('','ready');
     if(welcome) welcome.remove();
     chat.innerHTML='';
-    sysLine('▸ session opened for '+name+'.'+ZONE);
     setPreview(url);
     loadSites();
     input.focus();
+    loadHistory(name);
+  }
+
+  function renderHistory(messages){
+    messages.forEach(function(m){
+      if(m.role==='user'){ bubble('user','you').textContent=m.content; }
+      else if(m.content && m.content!=='(deployed)'){ bubble('bot','forge').textContent=m.content; }
+      else { sysLine('▸ deployed'); }
+    });
+  }
+
+  function loadHistory(name){
+    api('/api/sites/'+name+'/history')
+      .then(function(r){ return r.ok ? r.json() : {messages:[]}; })
+      .then(function(d){
+        if(state.active!==name) return; // user switched sites while loading
+        renderHistory((d&&d.messages)||[]);
+        sysLine('▸ session opened for '+name+'.'+ZONE);
+        chat.scrollTop=chat.scrollHeight;
+      })
+      .catch(function(){
+        if(state.active!==name) return;
+        sysLine('▸ session opened for '+name+'.'+ZONE);
+      });
   }
 
   function setPreview(url){
