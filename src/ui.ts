@@ -134,10 +134,21 @@ export function appPage(): string {
 
   /* ---- sidebar ---- */
   aside{background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
-  .brand{padding:20px 22px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .brand{padding:20px 22px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:10px;position:relative}
+  .brand-actions{display:flex;align-items:center;gap:8px}
+  .sites-btn{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);
+    border:1px solid var(--line);padding:6px 10px;border-radius:8px;display:flex;align-items:center;gap:6px;white-space:nowrap;transition:color .15s,border-color .15s}
+  .sites-btn:hover,.sites-btn.open{color:var(--accent);border-color:var(--accent)}
+  .sites-btn .cnt{background:var(--line);color:var(--text);border-radius:99px;padding:1px 6px;font-size:9.5px;min-width:16px;text-align:center}
+  .sites-btn:hover .cnt,.sites-btn.open .cnt{background:var(--accent);color:#1a1205}
   .brand a.logout{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);
     text-decoration:none;border:1px solid var(--line);padding:6px 10px;border-radius:8px;white-space:nowrap;transition:color .15s,border-color .15s}
   .brand a.logout:hover{color:var(--accent);border-color:var(--accent)}
+  .sites-panel{position:absolute;top:100%;left:0;right:0;margin-top:2px;z-index:40;background:var(--panel2);
+    border:1px solid var(--line);border-radius:12px;box-shadow:0 28px 70px -26px rgba(0,0,0,.85);
+    max-height:min(62vh,440px);overflow:auto;padding:10px;display:none}
+  .sites-panel.open{display:block}
+  .sites-panel h2{font-family:var(--mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);margin:6px 8px 10px}
   .brand .mark{font-family:var(--disp);font-weight:800;font-size:23px;letter-spacing:-.02em}
   .brand .mark b{color:var(--accent)}
   .brand .sub{font-family:var(--mono);font-size:9.5px;color:var(--muted);letter-spacing:.2em;text-transform:uppercase;margin-top:3px}
@@ -166,8 +177,6 @@ export function appPage(): string {
   .stephint.on{display:block}
   .stephint b{color:var(--accent)}
 
-  .sites{flex:1;overflow:auto;padding:12px 12px 20px}
-  .sites h2{font-family:var(--mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);margin:8px 8px 10px}
   .site{display:flex;align-items:center;gap:10px;padding:10px 11px;border-radius:10px;border:1px solid transparent;cursor:pointer;transition:background .12s,border-color .12s}
   .site:hover{background:var(--panel2)}
   .site.active{background:var(--panel2);border-color:var(--line)}
@@ -286,7 +295,14 @@ export function appPage(): string {
   <aside>
     <div class="brand">
       <div><div class="mark">⬡ for<b>ge</b></div><div class="sub">clydeford · worker builder</div></div>
-      <a class="logout" href="/logout" title="Log out">log out</a>
+      <div class="brand-actions">
+        <button class="sites-btn" id="sitesBtn" type="button">sites <span class="cnt" id="siteCount">0</span></button>
+        <a class="logout" href="/logout" title="Log out">log out</a>
+      </div>
+      <div class="sites-panel" id="sitesPanel">
+        <h2>your sites</h2>
+        <div id="siteList"><div class="empty">No sites yet. Name one and describe it above to forge your first.</div></div>
+      </div>
     </div>
     <form class="new" id="new-site" autocomplete="off">
       <h2>+ new site</h2>
@@ -298,10 +314,6 @@ export function appPage(): string {
       <label class="field"><textarea id="spec" placeholder="Describe the site to build — e.g. a neon retro landing page for a synthwave band with an email signup."></textarea></label>
       <button class="forge-btn" type="submit" id="createBtn">⚒ Forge it</button>
     </form>
-    <div class="sites">
-      <h2>your sites</h2>
-      <div id="siteList"><div class="empty">No sites yet. Name one and describe it above to forge your first.</div></div>
-    </div>
   </aside>
 
   <main>
@@ -375,6 +387,8 @@ const APP_JS = `
   var hTitle=$('hTitle'), hUrl=$('hUrl'), addr=$('addr'), preview=$('preview'), noprev=$('noprev');
   var siteList=$('siteList'), welcome=$('welcome'), openLink=$('openLink');
   var stepHint=$('stepHint'), specEl=$('spec'), nameWrap=document.querySelector('#new-site .urlrow');
+  var sitesPanel=$('sitesPanel'), sitesBtn=$('sitesBtn'), siteCount=$('siteCount');
+  function closeSites(){ sitesPanel.classList.remove('open'); sitesBtn.classList.remove('open'); }
 
   function setPill(kind, txt){ pill.className='pill'+(kind?(' '+kind):''); pillTxt.textContent=txt; }
 
@@ -398,6 +412,7 @@ const APP_JS = `
 
   function renderSites(sites){
     refreshOnboarding();
+    siteCount.textContent = sites.length;
     sites.sort(function(a,b){return (b.updatedAt||0)-(a.updatedAt||0);});
     if(!sites.length){ siteList.innerHTML='<div class="empty">No sites yet. Name one and describe it above to forge your first.</div>'; return; }
     siteList.innerHTML='';
@@ -423,6 +438,7 @@ const APP_JS = `
     setPill('','ready');
     if(welcome) welcome.remove();
     chat.innerHTML='';
+    closeSites();
     setPreview(url);
     loadSites();
     if(!isMobile()) input.focus(); // mobile: don't pop the keyboard on site select
@@ -572,6 +588,12 @@ const APP_JS = `
   specEl.addEventListener('input', refreshOnboarding);
   $('refresh').addEventListener('click', function(){ if(state.active) setPreview('https://'+state.active+'.'+ZONE); });
   $('backBtn').addEventListener('click', function(){ document.body.classList.remove('show-chat'); }); // mobile: back to sites
+  sitesBtn.addEventListener('click', function(e){ e.stopPropagation(); var open=sitesPanel.classList.toggle('open'); sitesBtn.classList.toggle('open', open); });
+  document.addEventListener('click', function(e){
+    if(!sitesPanel.classList.contains('open')) return;
+    if(sitesBtn.contains(e.target) || sitesPanel.contains(e.target)) return;
+    closeSites();
+  });
 
   // ---- draggable chat/preview divider ----
   (function(){
