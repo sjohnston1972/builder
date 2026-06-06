@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { deploySite, deleteSite, waitUntilLive } from "../src/deploy";
+import { deploySite, deleteSite, waitUntilLive, deployProject } from "../src/deploy";
 
 const ok = () =>
   new Response("hi", { status: 200, headers: { "content-type": "text/html" } });
@@ -160,4 +160,34 @@ test("waitUntilLive keeps waiting on Cloudflare SSL 5xx errors (521-526)", async
   );
   const live = await waitUntilLive("https://mysite.clydeford.net", { intervalMs: 1 });
   expect(live).toBe(true);
+});
+
+test("deployProject uploads assets, PUTs script with assets binding, attaches domain", async () => {
+  const calls: { url: string; method: string; metadata?: any }[] = [];
+  vi.stubGlobal("fetch", vi.fn(async (input: any, init: any) => {
+    const url = String(input);
+    const rec: any = { url, method: init?.method };
+    if (url.includes("/assets-upload-session"))
+      return new Response(JSON.stringify({ success: true, result: { jwt: "J", buckets: [] } }),
+        { headers: { "content-type": "application/json" } });
+    if (init?.method === "PUT" && url.includes("/workers/scripts/mysite")) {
+      rec.metadata = JSON.parse(await (init.body.get("metadata") as Blob).text());
+    }
+    calls.push(rec);
+    return new Response(JSON.stringify({ success: true, result: {} }),
+      { headers: { "content-type": "application/json" } });
+  }));
+
+  const url = await deployProject(
+    env, "mysite",
+    "export default { fetch(req, env) { return env.ASSETS.fetch(req); } }",
+    [{ path: "/index.html", contentBase64: btoa("<h1>hi</h1>"), contentType: "text/html" }],
+  );
+
+  expect(url).toBe("https://mysite.clydeford.net");
+  const put = calls.find((c) => c.method === "PUT" && c.url.includes("/workers/scripts/mysite"));
+  expect(put?.metadata.assets.jwt).toBe("J");
+  expect(put?.metadata.assets.config.not_found_handling).toBe("single-page-application");
+  expect(put?.metadata.bindings.some((b: any) => b.type === "assets" && b.name === "ASSETS")).toBe(true);
+  expect(calls.some((c) => c.url.includes("/workers/domains"))).toBe(true);
 });
