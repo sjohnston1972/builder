@@ -1,7 +1,6 @@
-import { writeFiles, collectAssets, contentType } from "./build-lib.mjs";
+import { writeFiles, collectAssets, contentType, cleanWorkDir, parseCommand } from "./build-lib.mjs";
 import { createServer } from "node:http";
 import { spawn } from "node:child_process";
-import { rm } from "node:fs/promises";
 import { join } from "node:path";
 
 const PORT = process.env.PORT || 8080;
@@ -27,31 +26,35 @@ function runStreaming(cmd, args, cwd, onLine) {
 }
 
 async function handleBuild(req, res) {
-  const body = JSON.parse(await readBody(req));
-  const {
-    files, siteName,
-    installCommand = "npm install --no-audit --no-fund",
-    buildCommand = "npm run build",
-    outputDir = "dist",
-  } = body;
-
   res.writeHead(200, { "content-type": "application/x-ndjson" });
   const emit = (obj) => res.write(JSON.stringify(obj) + "\n");
   const log = (line) => emit({ type: "log", line });
 
-  const root = join(WORK, (siteName || "site").replace(/[^a-z0-9-]/gi, "_"));
   try {
-    await rm(join(root, outputDir), { recursive: true, force: true });
+    const body = JSON.parse(await readBody(req));
+    const {
+      files, siteName,
+      installCommand = "npm install --no-audit --no-fund",
+      buildCommand = "npm run build",
+      outputDir = "dist",
+    } = body;
+
+    // Single-session assumption: one build at a time per site (no concurrent /build for the same siteName).
+    const root = join(WORK, (siteName || "site").replace(/[^a-z0-9-]/gi, "_"));
+
+    let iParts, bParts;
+    try { iParts = parseCommand(installCommand); bParts = parseCommand(buildCommand); }
+    catch (e) { emit({ type: "result", ok: false, error: String(e.message) }); return res.end(); }
+
+    await cleanWorkDir(root);
     await writeFiles(root, files);
 
     log("$ " + installCommand);
-    const [iCmd, ...iArgs] = installCommand.split(" ");
-    const iCode = await runStreaming(iCmd, iArgs, root, log);
+    const iCode = await runStreaming(iParts[0], iParts.slice(1), root, log);
     if (iCode !== 0) { emit({ type: "result", ok: false, error: `install failed (exit ${iCode})` }); return res.end(); }
 
     log("$ " + buildCommand);
-    const [bCmd, ...bArgs] = buildCommand.split(" ");
-    const bCode = await runStreaming(bCmd, bArgs, root, log);
+    const bCode = await runStreaming(bParts[0], bParts.slice(1), root, log);
     if (bCode !== 0) { emit({ type: "result", ok: false, error: `build failed (exit ${bCode})` }); return res.end(); }
 
     const assets = await collectAssets(join(root, outputDir));
@@ -64,9 +67,17 @@ async function handleBuild(req, res) {
   }
 }
 
+const MAX_BODY_BYTES = 25 * 1024 * 1024;
 function readBody(req) {
   return new Promise((resolve, reject) => {
-    let d = ""; req.on("data", (c) => (d += c)); req.on("end", () => resolve(d)); req.on("error", reject);
+    let d = ""; let size = 0;
+    req.on("data", (c) => {
+      size += c.length;
+      if (size > MAX_BODY_BYTES) { reject(new Error("request body too large")); req.destroy(); return; }
+      d += c;
+    });
+    req.on("end", () => resolve(d));
+    req.on("error", reject);
   });
 }
 

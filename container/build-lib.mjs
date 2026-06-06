@@ -1,4 +1,4 @@
-import { mkdir, writeFile, readdir, readFile } from "node:fs/promises";
+import { mkdir, writeFile, readdir, readFile, rm } from "node:fs/promises";
 import { dirname, join, resolve, relative, isAbsolute, extname } from "node:path";
 
 const TYPES = {
@@ -37,4 +37,24 @@ export async function collectAssets(distDir) {
   }
   await walk(distDir);
   return out;
+}
+
+// Clear a work dir before a fresh build, preserving node_modules (warm dependency cache).
+export async function cleanWorkDir(root) {
+  let entries;
+  try { entries = await readdir(root); } catch { return; } // dir doesn't exist yet — nothing to clean
+  await Promise.all(
+    entries.filter((e) => e !== "node_modules").map((e) => rm(join(root, e), { recursive: true, force: true })),
+  );
+}
+
+const ALLOWED_BINS = new Set(["npm", "pnpm", "yarn", "npx", "node"]);
+// Split a build/install command into [bin, ...args] and reject non-package-manager binaries.
+// NOTE: simple whitespace split — arguments containing spaces are not supported (defaults don't need them).
+export function parseCommand(command) {
+  const parts = String(command).trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0 || !ALLOWED_BINS.has(parts[0])) {
+    throw new Error(`disallowed command: ${parts[0] ?? "(empty)"}`);
+  }
+  return parts;
 }

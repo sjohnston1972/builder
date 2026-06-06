@@ -1,8 +1,8 @@
 import { afterEach, expect, test } from "vitest";
-import { mkdtempSync, rmSync, readFileSync } from "node:fs";
+import { mkdtempSync, rmSync, readFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, basename } from "node:path";
-import { writeFiles, collectAssets, contentType } from "../container/build-lib.mjs";
+import { writeFiles, collectAssets, contentType, cleanWorkDir, parseCommand } from "../container/build-lib.mjs";
 
 let dirs: string[] = [];
 const tmp = () => { const d = mkdtempSync(join(tmpdir(), "bb-")); dirs.push(d); return d; };
@@ -49,4 +49,33 @@ test("writeFiles rejects sibling-prefix escape", async () => {
   // e.g. root = /tmp/bb-abc123  →  sibling = /tmp/bb-abc123x/evil.txt
   await expect(writeFiles(root, [{ path: "../" + basename(root) + "x/evil.txt", content: "x" }]))
     .rejects.toThrow(/path|unsafe/i);
+});
+
+test("parseCommand allows package managers and splits args", () => {
+  expect(parseCommand("npm install --no-audit")).toEqual(["npm", "install", "--no-audit"]);
+  expect(parseCommand("pnpm build")).toEqual(["pnpm", "build"]);
+});
+
+test("parseCommand rejects disallowed binaries", () => {
+  expect(() => parseCommand("rm -rf /")).toThrow(/disallowed/i);
+  expect(() => parseCommand("")).toThrow(/disallowed/i);
+});
+
+test("cleanWorkDir removes sources but preserves node_modules", async () => {
+  const root = tmp();
+  mkdirSync(join(root, "node_modules", "react"), { recursive: true });
+  writeFileSync(join(root, "node_modules", "react", "index.js"), "module.exports={}");
+  mkdirSync(join(root, "src"), { recursive: true });
+  writeFileSync(join(root, "src", "old.tsx"), "stale");
+  writeFileSync(join(root, "package.json"), "{}");
+
+  await cleanWorkDir(root);
+
+  expect(existsSync(join(root, "node_modules", "react", "index.js"))).toBe(true);
+  expect(existsSync(join(root, "src", "old.tsx"))).toBe(false);
+  expect(existsSync(join(root, "package.json"))).toBe(false);
+});
+
+test("cleanWorkDir is a no-op on a missing dir", async () => {
+  await expect(cleanWorkDir(join(tmpdir(), "bb-does-not-exist-zzz"))).resolves.toBeUndefined();
 });
