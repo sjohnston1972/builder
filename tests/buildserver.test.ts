@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from "vitest";
 import { mkdtempSync, rmSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, basename } from "node:path";
 import { writeFiles, collectAssets, contentType } from "../container/build-lib.mjs";
 
 let dirs: string[] = [];
@@ -41,4 +41,12 @@ test("contentType maps common extensions", () => {
   expect(contentType("a.css")).toBe("text/css");
   expect(contentType("a.svg")).toBe("image/svg+xml");
   expect(contentType("a.unknown")).toBe("application/octet-stream");
+});
+
+test("writeFiles rejects sibling-prefix escape", async () => {
+  const root = tmp();
+  // A path that, after resolve, lands outside root but shares its string prefix.
+  // e.g. root = /tmp/bb-abc123  →  sibling = /tmp/bb-abc123x/evil.txt
+  await expect(writeFiles(root, [{ path: "../" + basename(root) + "x/evil.txt", content: "x" }]))
+    .rejects.toThrow(/path|unsafe/i);
 });

@@ -1,5 +1,5 @@
 import { mkdir, writeFile, readdir, readFile } from "node:fs/promises";
-import { dirname, join, resolve, relative, extname } from "node:path";
+import { dirname, join, resolve, relative, isAbsolute, extname } from "node:path";
 
 const TYPES = {
   ".html": "text/html", ".css": "text/css", ".js": "text/javascript",
@@ -17,7 +17,8 @@ export function contentType(p) {
 export async function writeFiles(root, files) {
   for (const f of files) {
     const target = resolve(root, f.path);
-    if (!target.startsWith(resolve(root))) throw new Error(`unsafe path: ${f.path}`);
+    const rel = relative(resolve(root), target);
+    if (rel === "" || rel.startsWith("..") || isAbsolute(rel)) throw new Error(`unsafe path: ${f.path}`);
     await mkdir(dirname(target), { recursive: true });
     await writeFile(target, f.content, "utf8");
   }
