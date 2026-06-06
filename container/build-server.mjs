@@ -1,4 +1,4 @@
-import { writeFiles, collectAssets, contentType, cleanWorkDir, parseCommand } from "./build-lib.mjs";
+import { writeFiles, collectAssets, cleanWorkDir, parseCommand } from "./build-lib.mjs";
 import { createServer } from "node:http";
 import { spawn } from "node:child_process";
 import { join } from "node:path";

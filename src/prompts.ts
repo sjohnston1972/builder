@@ -45,6 +45,10 @@ Two ways to ship:
   npm run build) and the outputDir (default dist) is served as static assets.
   - For server/API routes, add a Worker entry file and pass its path as workerEntry; it receives
     env.ANTHROPIC_API_KEY and env.ASSETS (call env.ASSETS.fetch(request) to serve the SPA).
+    IMPORTANT: the workerEntry is uploaded AS-IS — it is NOT bundled or transpiled. It MUST be a
+    single self-contained .js/.mjs ES module: plain JavaScript only (no TypeScript), and no imports
+    of other project files (Web/Workers APIs and a default export are fine). Omit workerEntry for a
+    pure static SPA (the assets are served automatically).
   - Choose deploy_project ONLY when a build is genuinely needed; otherwise prefer deploy_worker.
 
 Conversation flow:
@@ -81,6 +85,7 @@ export const DEPLOY_PROJECT_TOOL = {
         type: "string",
         description:
           "Optional path of a file (already included in files[]) to use as the Worker module for /api routes. " +
+          "Must be a single self-contained .js/.mjs ES module (plain JS, no TypeScript, no imports of other project files) — it is uploaded as-is, NOT bundled. " +
           "It receives env.ANTHROPIC_API_KEY and env.ASSETS. Omit for a pure static site.",
       },
     },
