@@ -1,3 +1,4 @@
+import { writeFiles, collectAssets, contentType } from "./build-lib.mjs";
 import { createServer } from "node:http";
 
 const PORT = process.env.PORT || 8080;
