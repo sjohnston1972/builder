@@ -94,9 +94,10 @@ export class SiteSession extends DurableObject<Env> {
                 (line) => send({ type: "build_log", line }),
               );
               if (!result.ok || !result.assets) {
-                send({ type: "build_failed", error: result.error ?? "build failed" });
+                const errMsg = result.error ?? "build failed";
+                send({ type: "build_failed", error: errMsg });
                 // Record the failure so the model can fix it next turn; keep previous deploy live.
-                assistantText += `\n[build failed: ${result.error ?? "unknown"}]`;
+                assistantText += `${assistantText ? "\n" : ""}[build failed: ${errMsg}]`;
                 continue;
               }
               const workerScript = ev.workerEntry
