@@ -60,6 +60,39 @@ export async function deploySite(env: Env, name: string, script: string): Promis
   return `https://${name}.${env.SITE_ZONE}`;
 }
 
+// When a subdomain is first attached, Cloudflare provisions an edge TLS
+// certificate for it — anywhere from a few seconds to a couple of minutes.
+// Until that finishes the URL fails the TLS handshake (fetch throws) or the
+// edge returns an SSL error (5xx). Poll the URL so the "live" signal we hand
+// the client is truthful, rather than optimistically firing the instant the
+// API accepts the deploy. `onPending` fires once, after the first miss, so the
+// UI can show a "provisioning…" state only when the site isn't already live
+// (i.e. genuine first deploys — redeploys pass the first check instantly).
+export async function waitUntilLive(
+  url: string,
+  opts: { budgetMs?: number; intervalMs?: number; onPending?: () => void } = {},
+): Promise<boolean> {
+  const { budgetMs = 90_000, intervalMs = 3_000, onPending } = opts;
+  const deadline = Date.now() + budgetMs;
+  let notifiedPending = false;
+  while (Date.now() < deadline) {
+    try {
+      const res = await fetch(url, { method: "GET", headers: { "cache-control": "no-cache" } });
+      // Any normal app response (even a 404) means TLS + routing are up.
+      // Cloudflare's own "cert not ready" errors surface as 5xx (521–526).
+      if (res.status < 500) return true;
+    } catch {
+      // TLS handshake / DNS not ready yet — keep waiting.
+    }
+    if (!notifiedPending) {
+      notifiedPending = true;
+      onPending?.();
+    }
+    await new Promise((r) => setTimeout(r, intervalMs));
+  }
+  return false;
+}
+
 export async function deleteSite(env: Env, name: string): Promise<void> {
   const hostname = `${name}.${env.SITE_ZONE}`;
 

@@ -1,7 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import type { Env, StoredMessage } from "./types";
 import { streamTurn } from "./anthropic";
-import { deploySite } from "./deploy";
+import { deploySite, waitUntilLive } from "./deploy";
 
 interface State {
   messages: StoredMessage[];
@@ -67,7 +67,13 @@ export class SiteSession extends DurableObject<Env> {
               state.deployedUrl = url;
               await ctx.storage.put("script", ev.script);
               await ctx.storage.put("url", url);
-              send({ type: "deployed", url, explanation: ev.explanation });
+              // Don't claim "live" until the URL actually responds. On a first
+              // deploy the edge TLS cert is still provisioning; tell the client
+              // it's pending, and report whether it came up within our window.
+              const live = await waitUntilLive(url, {
+                onPending: () => send({ type: "provisioning" }),
+              });
+              send({ type: "deployed", url, explanation: ev.explanation, provisioning: !live });
             }
           }
           state.messages.push({ role: "assistant", content: assistantText || "(deployed)" });
