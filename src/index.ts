@@ -12,6 +12,7 @@ import { sanitizeName, isValidName } from "./names";
 import { deleteSite } from "./deploy";
 
 export { SiteSession } from "./session";
+export { BuildBox } from "./buildbox";
 
 const json = (data: unknown, status = 200) =>
   new Response(JSON.stringify(data), {

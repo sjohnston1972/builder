@@ -1,0 +1,6 @@
+{
+  "name": "forge-build-server",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22" }
+}

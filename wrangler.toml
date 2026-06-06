@@ -23,3 +23,16 @@ new_sqlite_classes = ["SiteSession"]
 [[kv_namespaces]]
 binding = "SITES"
 id = "ab925a8b196a4be2bdbd2a8ea7bac00d"
+
+[[containers]]
+class_name = "BuildBox"
+image = "./container/Dockerfile"
+max_instances = 5
+
+[[durable_objects.bindings]]
+name = "BUILD_BOX"
+class_name = "BuildBox"
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["BuildBox"]
