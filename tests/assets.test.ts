@@ -20,17 +20,25 @@ test("buildManifest maps each asset path to hash + byte size", async () => {
 });
 
 test("uploadAssets registers manifest, uploads buckets, returns completion jwt", async () => {
+  const assets = [{ path: "/index.html", contentBase64: btoa("hi"), contentType: "text/html" }];
+  // Use the REAL computed hash so the upload bucket actually matches an asset and the
+  // form-population path is exercised (not skipped via the `if (!a) continue` guard).
+  const { manifest } = await buildManifest(assets);
+  const realHash = manifest["/index.html"].hash;
+
   const calls: string[] = [];
+  let uploadedForm: FormData | null = null;
   const fetchMock = vi.fn(async (input: any, init: any) => {
     const url = String(input);
     calls.push(`${init?.method} ${url}`);
     if (url.includes("/assets-upload-session")) {
       return new Response(JSON.stringify({
         success: true,
-        result: { jwt: "UPLOAD_JWT", buckets: [["HASHPLACEHOLDER"]] },
+        result: { jwt: "UPLOAD_JWT", buckets: [[realHash]] },
       }), { headers: { "content-type": "application/json" } });
     }
     if (url.includes("/workers/assets/upload")) {
+      uploadedForm = init?.body as FormData;
       return new Response(JSON.stringify({ success: true, result: { jwt: "COMPLETION_JWT" } }),
         { headers: { "content-type": "application/json" } });
     }
@@ -38,7 +46,6 @@ test("uploadAssets registers manifest, uploads buckets, returns completion jwt",
   });
   vi.stubGlobal("fetch", fetchMock);
 
-  const assets = [{ path: "/index.html", contentBase64: btoa("hi"), contentType: "text/html" }];
   const env = { CF_ACCOUNT_ID: "acct1", CF_API_TOKEN: "tok" } as any;
   const jwt = await uploadAssets(env, "mysite", assets);
 
@@ -46,6 +53,9 @@ test("uploadAssets registers manifest, uploads buckets, returns completion jwt",
   expect(calls[0]).toContain("POST");
   expect(calls[0]).toContain("/workers/scripts/mysite/assets-upload-session");
   expect(calls.some((c) => c.includes("/workers/assets/upload"))).toBe(true);
+  // The bucket upload actually carried the asset (form-population path covered).
+  expect(uploadedForm).not.toBeNull();
+  expect((uploadedForm as unknown as FormData).has(realHash)).toBe(true);
 });
 
 test("uploadAssets returns the session jwt directly when no buckets need upload", async () => {

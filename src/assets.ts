@@ -62,6 +62,9 @@ export async function uploadAssets(env: Env, name: string, assets: BuiltAsset[])
       if (!a) continue;
       form.set(hash, new Blob([a.contentBase64], { type: a.contentType }), hash);
     }
+    // All bucket uploads authenticate with the manifest/session JWT (not a rolling
+    // per-bucket token) — this is what lets wrangler upload buckets in parallel. The
+    // completion JWT returned after uploads is only for the final script PUT.
     const res = await fetch(`${API}/accounts/${env.CF_ACCOUNT_ID}/workers/assets/upload?base64=true`, {
       method: "POST",
       headers: { Authorization: `Bearer ${session.jwt}` },
