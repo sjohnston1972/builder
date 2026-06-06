@@ -62,19 +62,24 @@ Two deploy paths, chosen by Claude per request:
 ### Invariants
 
 1. The container is a **pure build function**: project files in → built assets + logs out.
-2. The container never holds `CF_API_TOKEN` or `ANTHROPIC_API_KEY`. The only binding it gets is a
-   **scoped, cache-only R2 bucket** for `node_modules` caching (benign; a throwaway build cache).
+2. The container is **fully credential-free** — it receives no Workers bindings at all (a container
+   is a plain Linux process; bindings are a Workers-only concept). All credentialed work
+   (`CF_API_TOKEN`, `ANTHROPIC_API_KEY`, deploys) stays in the trusted DO.
 3. The existing `deploy_worker` / `deploySite()` path is unchanged. Frameworks are additive.
 4. Built sites are Workers on `<name>.clydeford.net` → existing custom-domain + SSL polling reused.
 
 ### Warm-build routing & caching
 
-- A site's builds route to a BuildBox instance **keyed by site name** (`BUILD_BOX.idFromName(name)`),
+- A site's builds route to a BuildBox instance **keyed by site name** (`BUILD_BOX.getByName(name)`),
   so repeated edits in one chat session reuse a warm container with `node_modules` still on disk.
-  `sleepAfter` ≈ 10m keeps it warm during an active session.
-- An **R2 `node_modules` cache keyed by a hash of the lockfile** survives container sleeps so the
-  first build of a later session restores deps instead of a cold `npm install`. The container reads/
-  writes this via its scoped cache-only R2 binding.
+  `sleepAfter` ≈ 10m keeps it warm during an active session. This covers the common Forge case
+  (repeated refinement within a session) with zero extra infrastructure.
+- **Note on cross-sleep caching:** a Cloudflare Container is a plain Linux process and does **not**
+  receive Workers bindings (no in-container R2/KV). Persisting `node_modules` across container sleeps
+  would require either DO-mediated tarball shipping over the DO↔container channel (heavy — a
+  `node_modules` tarball can be tens–hundreds of MB, potentially slower than reinstalling) or giving
+  the container R2 S3 credentials (violates the credential-free invariant). It is therefore
+  **deferred** as a future enhancement, not part of v1. v1 relies on warm-instance caching only.
 
 ## Components
 
@@ -82,16 +87,16 @@ Two deploy paths, chosen by Claude per request:
 
 - A `Container`-extending Durable Object class declared in `wrangler.toml`, backed by a Docker
   image: a slim Node base + a small HTTP **build server** listening on a port the Container proxies.
-- Bindings: **only** a cache-only R2 bucket (`BUILD_CACHE`). No secrets.
+- Bindings: **none** (fully credential-free; see invariant 2).
 - `sleepAfter` ≈ `"10m"`.
 - Build server endpoint `POST /build`:
-  - Request: `{ files: [{path, content}], installCommand, buildCommand, outputDir, lockfileHash }`.
-  - Behavior: write files to a unique temp dir → restore `node_modules` from R2 cache if
-    `lockfileHash` hits → run install (stream logs) → run build (stream logs) → read `outputDir`
-    recursively → save updated `node_modules` to cache → return assets + logs.
-  - Response: streamed text log lines, terminating with a JSON result:
-    `{ ok: true, assets: [{path, contentBase64, contentType, hash, size}] }` or
-    `{ ok: false, error, }` (logs already streamed).
+  - Request: `{ files: [{path, content}], installCommand, buildCommand, outputDir }`.
+  - Behavior: write files to a per-site work dir → run install (stream logs) → run build (stream
+    logs) → read `outputDir` recursively → return assets + logs. `node_modules` persists on the
+    container's ephemeral disk between rebuilds while the instance is warm.
+  - Response: streamed NDJSON — `{"type":"log","line":...}` per output line, terminating with
+    `{"type":"result","ok":true,"assets":[{path,contentBase64,contentType}]}` or
+    `{"type":"result","ok":false,"error":...}`.
   - Limits: build timeout (~120s), max total input size, max file count, max output size.
 
 ### 2. `SiteSession` DO (existing — orchestrator/brain)
@@ -183,8 +188,10 @@ client ──chat──▶ index.ts ──▶ SiteSession.fetch (turn)
 - **Container egress for `npm install`** — confirm the container can reach the npm registry.
 - **Build cost** — warm containers bill for active time; `sleepAfter` bounds it. Acceptable for
   personal use; revisit if usage grows.
-- **DO↔container payload size** — project source travels as JSON; cap sizes. (node_modules is cached
-  via R2 in the container, not shipped over the channel.)
+- **DO↔container payload size** — project source travels as JSON; cap sizes. `node_modules` is never
+  shipped over the channel (it lives on the container's ephemeral disk).
+- **Cross-sleep dep cache** — deferred (see "Warm-build routing & caching"); v1 reinstalls on a cold
+  container. Acceptable since warm instances cover the in-session refine loop.
 - **Image size vs cold start** — keep the Node image slim to stay near the 1–3s cold-start range.
 - **Worker script size limit** — not a concern: the JS bundle is served as an *asset*, not part of
   the Worker script.
