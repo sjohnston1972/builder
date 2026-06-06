@@ -250,6 +250,10 @@ export function appPage(): string {
   .announce .open:hover{filter:brightness(1.08)}.announce .open:active{transform:translateY(1px)}
   .announce.prov{align-items:flex-start}
   .announce .note{font-family:var(--mono);font-size:11px;line-height:1.55;color:var(--accent2);margin-top:8px;white-space:normal}
+  .buildlog{align-self:flex-start;max-width:min(94%,560px);background:#0a0b0e;border:1px solid var(--line);
+    border-radius:12px;padding:10px 12px;font-family:var(--mono);font-size:11px;line-height:1.5;
+    color:var(--muted);white-space:pre-wrap;max-height:220px;overflow:auto}
+  .buildlog.fail{border-color:var(--err);color:var(--err)}
 
   /* ---- confetti burst ---- */
   .confetti{position:fixed;inset:0;pointer-events:none;z-index:60;overflow:hidden}
@@ -633,6 +637,23 @@ const APP_JS = `
               if(v) v.textContent='Provisioning TLS certificate — first deploys can take a few minutes…';
             }
           }
+          else if(ev.type==='building_project'){
+            stopVerbs(); setPill('work','building');
+            if(!window.__bl){
+              window.__bl=document.createElement('div'); window.__bl.className='buildlog';
+              chat.appendChild(window.__bl);
+            }
+            window.__bl.textContent='Building project…\\n';
+            chat.scrollTop=chat.scrollHeight;
+          }
+          else if(ev.type==='build_log'){
+            if(window.__bl){ window.__bl.textContent+=ev.line+'\\n'; window.__bl.scrollTop=window.__bl.scrollHeight; }
+          }
+          else if(ev.type==='build_failed'){
+            setPill('','error');
+            if(window.__bl){ window.__bl.className='buildlog fail'; window.__bl.textContent+='\\n▲ '+ev.error+'\\n'; }
+            window.__bl=null;
+          }
           else if(ev.type==='deployed'){
             stopVerbs(); setPill('live','live');
             var host=ev.url.replace('https://','');
@@ -648,6 +669,7 @@ const APP_JS = `
             }
             confetti();
             setTimeout(function(){ setPreview(ev.url); }, 1200);
+            window.__bl=null;
           }
           else if(ev.type==='error'){ stopVerbs(); state.building=false; setPill('','error'); var eb=bubble('sys',''); eb.style.color='var(--err)'; eb.textContent='▲ '+ev.message; }
         }
