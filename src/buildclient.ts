@@ -47,5 +47,17 @@ export async function runBuild(
       else if (ev.type === "result") result = { ok: ev.ok, assets: ev.assets, error: ev.error };
     }
   }
+  // Flush a final line that arrived without a trailing newline, so a result on the
+  // last line is never dropped if the stream ends mid-buffer.
+  const tail = buf.trim();
+  if (tail) {
+    try {
+      const ev: any = JSON.parse(tail);
+      if (ev.type === "log") onLog(ev.line);
+      else if (ev.type === "result") result = { ok: ev.ok, assets: ev.assets, error: ev.error };
+    } catch {
+      /* ignore a trailing partial/garbage line */
+    }
+  }
   return result;
 }
