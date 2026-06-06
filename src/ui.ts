@@ -540,6 +540,7 @@ const APP_JS = `
   // Came back to the app (foreground / bfcache restore) after losing a build's stream.
   function recover(){
     if(!state.active || !state.building) return;
+    window.__bl=null; // detached by the chat clear below — drop the stale ref so a new build log is created
     chat.innerHTML='';
     loadHistory(state.active);
   }
@@ -650,7 +651,7 @@ const APP_JS = `
             if(window.__bl){ window.__bl.textContent+=ev.line+'\\n'; window.__bl.scrollTop=window.__bl.scrollHeight; }
           }
           else if(ev.type==='build_failed'){
-            setPill('','error');
+            stopVerbs(); state.building=false; setPill('','error');
             if(window.__bl){ window.__bl.className='buildlog fail'; window.__bl.textContent+='\\n▲ '+ev.error+'\\n'; }
             window.__bl=null;
           }
