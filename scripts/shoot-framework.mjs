@@ -37,32 +37,38 @@ try {
   await page.fill("#spec", spec);
   await page.click("#createBtn");
 
-  // Wait for the build to finish: success (.announce) or failure (.buildlog.fail).
-  // Capture the build-log streaming state once, to prove the container path ran.
+  // Wait for the build to finish. Detect completion via the history API (robust —
+  // survives SSE stream drops over a multi-minute build), and also watch the UI for
+  // the build-log (proves the container path) and the failure state.
   let sawBuildLog = false, outcome = null, failText = "";
-  const deadline = Date.now() + 300_000; // 5 min: cold start + npm install + vite build + asset upload + SSL
+  const deadline = Date.now() + 420_000; // 7 min: cold container + npm install + vite build + asset upload + SSL
   while (Date.now() < deadline) {
     if (!sawBuildLog && (await page.locator(".buildlog").count())) {
       sawBuildLog = true;
       console.log("  • build log streaming (container path engaged)");
       await page.locator("main").screenshot({ path: `${OUT}/framework-building.png` }).catch(() => {});
     }
-    if (await page.locator(".announce").count()) { outcome = "live"; break; }
     if (await page.locator(".buildlog.fail").count()) {
       outcome = "failed";
       failText = await page.locator(".buildlog.fail").innerText().catch(() => "");
       break;
     }
-    await page.waitForTimeout(2000);
+    // Authoritative completion check: server marks status idle + records the url.
+    const hist = await page.evaluate(async (n) => {
+      try { return await (await fetch("/api/sites/" + n + "/history")).json(); } catch { return null; }
+    }, name);
+    if (hist && hist.status === "idle" && hist.url) { outcome = "live"; break; }
+    await page.waitForTimeout(3000);
   }
 
   if (outcome === "failed") throw new Error("build failed:\n" + failText.slice(-1200));
-  if (outcome !== "live") throw new Error("timed out waiting for deploy (no announce within 5 min)");
+  if (outcome !== "live") throw new Error("timed out waiting for deploy (status never idle within 7 min)");
 
   console.log("→ deployed; capturing app screenshot");
   await page.waitForTimeout(500);
   await page.screenshot({ path: `${OUT}/framework-build.png` });
-  const url = (await page.locator(".announce .open").getAttribute("href")) || `https://${name}.clydeford.net`;
+  const openLoc = page.locator(".announce .open");
+  const url = (await openLoc.count()) ? await openLoc.getAttribute("href") : `https://${name}.clydeford.net`;
   console.log("  • site URL:", url);
   console.log("  • container build path exercised:", sawBuildLog);
 
