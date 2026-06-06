@@ -1,10 +1,19 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { Env, StoredMessage } from "./types";
-import { MODEL, SYSTEM_PROMPT, DEPLOY_TOOL } from "./prompts";
+import { MODEL, SYSTEM_PROMPT, DEPLOY_TOOL, DEPLOY_PROJECT_TOOL } from "./prompts";
 
 export type TurnEvent =
   | { type: "text"; text: string }
-  | { type: "deploy"; explanation: string; script: string };
+  | { type: "deploy"; explanation: string; script: string }
+  | {
+      type: "deploy_project";
+      explanation: string;
+      files: { path: string; content: string }[];
+      installCommand?: string;
+      buildCommand?: string;
+      outputDir?: string;
+      workerEntry?: string;
+    };
 
 export async function* streamTurn(
   env: Env,
@@ -38,7 +47,7 @@ export async function* streamTurn(
     max_tokens: 32000,
     thinking: { type: "adaptive" },
     system,
-    tools: [DEPLOY_TOOL],
+    tools: [DEPLOY_TOOL, DEPLOY_PROJECT_TOOL],
     messages: history.map((m) => ({ role: m.role, content: m.content })),
   });
 
@@ -53,6 +62,18 @@ export async function* streamTurn(
     if (block.type === "tool_use" && block.name === "deploy_worker") {
       const input = block.input as { explanation: string; script: string };
       yield { type: "deploy", explanation: input.explanation, script: input.script };
+    }
+    if (block.type === "tool_use" && block.name === "deploy_project") {
+      const i = block.input as any;
+      yield {
+        type: "deploy_project",
+        explanation: i.explanation,
+        files: i.files,
+        installCommand: i.installCommand,
+        buildCommand: i.buildCommand,
+        outputDir: i.outputDir,
+        workerEntry: i.workerEntry,
+      };
     }
   }
 }
