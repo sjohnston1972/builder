@@ -59,6 +59,7 @@ export async function attachDomain(env: Env, name: string): Promise<void> {
       environment: "production",
     }),
   }).catch((e: Error) => {
+    // Domain may already be attached from a prior deploy — ignore "already exists".
     if (!/already|exists|duplicate/i.test(String(e.message))) throw e;
   });
 }

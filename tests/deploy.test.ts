@@ -167,13 +167,13 @@ test("deployProject uploads assets, PUTs script with assets binding, attaches do
   vi.stubGlobal("fetch", vi.fn(async (input: any, init: any) => {
     const url = String(input);
     const rec: any = { url, method: init?.method };
+    calls.push(rec); // record every call, including the assets-upload-session
     if (url.includes("/assets-upload-session"))
       return new Response(JSON.stringify({ success: true, result: { jwt: "J", buckets: [] } }),
         { headers: { "content-type": "application/json" } });
     if (init?.method === "PUT" && url.includes("/workers/scripts/mysite")) {
       rec.metadata = JSON.parse(await (init.body.get("metadata") as Blob).text());
     }
-    calls.push(rec);
     return new Response(JSON.stringify({ success: true, result: {} }),
       { headers: { "content-type": "application/json" } });
   }));
@@ -185,9 +185,38 @@ test("deployProject uploads assets, PUTs script with assets binding, attaches do
   );
 
   expect(url).toBe("https://mysite.clydeford.net");
+  expect(calls.some((c) => c.url.includes("/assets-upload-session"))).toBe(true); // upload step ran
   const put = calls.find((c) => c.method === "PUT" && c.url.includes("/workers/scripts/mysite"));
   expect(put?.metadata.assets.jwt).toBe("J");
   expect(put?.metadata.assets.config.not_found_handling).toBe("single-page-application");
   expect(put?.metadata.bindings.some((b: any) => b.type === "assets" && b.name === "ASSETS")).toBe(true);
   expect(calls.some((c) => c.url.includes("/workers/domains"))).toBe(true);
+});
+
+test("deployProject injects ANTHROPIC_API_KEY as a secret binding alongside ASSETS", async () => {
+  let metadata: any = null;
+  vi.stubGlobal("fetch", vi.fn(async (input: any, init: any) => {
+    const url = String(input);
+    if (url.includes("/assets-upload-session"))
+      return new Response(JSON.stringify({ success: true, result: { jwt: "J", buckets: [] } }),
+        { headers: { "content-type": "application/json" } });
+    if (init?.method === "PUT" && url.includes("/workers/scripts/"))
+      metadata = JSON.parse(await (init.body.get("metadata") as Blob).text());
+    return new Response(JSON.stringify({ success: true, result: {} }),
+      { headers: { "content-type": "application/json" } });
+  }));
+
+  await deployProject(
+    { ...env, ANTHROPIC_API_KEY: "sk-test-123" } as any,
+    "aibot",
+    "export default { fetch(req, env) { return env.ASSETS.fetch(req); } }",
+    [{ path: "/index.html", contentBase64: btoa("<h1>hi</h1>"), contentType: "text/html" }],
+  );
+
+  const secret = (metadata.bindings || []).find((b: any) => b.name === "ANTHROPIC_API_KEY");
+  expect(secret).toBeTruthy();
+  expect(secret.type).toBe("secret_text");
+  expect(secret.text).toBe("sk-test-123");
+  // ASSETS binding still present too.
+  expect(metadata.bindings.some((b: any) => b.type === "assets" && b.name === "ASSETS")).toBe(true);
 });
