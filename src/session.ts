@@ -35,7 +35,10 @@ export class SiteSession extends DurableObject<Env> {
     if (status === "building") {
       const last = messages[messages.length - 1];
       const startedAt = (await this.ctx.storage.get<number>("buildStartedAt")) ?? 0;
-      if ((last && last.role === "assistant") || (startedAt && Date.now() - startedAt > 720_000)) {
+      // idle if: the turn replied (assistant last); OR no start timestamp (a legacy/dead
+      // turn — new turns always write buildStartedAt before status); OR it's been longer
+      // than any legitimate turn.
+      if ((last && last.role === "assistant") || !startedAt || Date.now() - startedAt > 720_000) {
         status = "idle";
       }
     }
@@ -55,8 +58,10 @@ export class SiteSession extends DurableObject<Env> {
     // reconnects mid-build (mobile app-switch, screen sleep, reload) can see the
     // turn is in progress and poll for the result.
     await this.ctx.storage.put("messages", state.messages);
+    // Write buildStartedAt BEFORE status so a reader can never observe status="building"
+    // without a timestamp (which getState treats as a dead/legacy turn).
+    await this.ctx.storage.put("buildStartedAt", Date.now());
     await this.ctx.storage.put("status", "building");
-    await this.ctx.storage.put("buildStartedAt", Date.now()); // for the stuck-build backstop in getState
 
     const env = this.env;
     const ctx = this.ctx;
