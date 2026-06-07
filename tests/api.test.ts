@@ -91,6 +91,8 @@ test("history reports build status for reconnecting clients", async () => {
   const stub = env.SITE_SESSION.get(env.SITE_SESSION.idFromName("status-site"));
   await runInDurableObject(stub, async (_i: SiteSession, ctx) => {
     await ctx.storage.put("status", "building");
+    await ctx.storage.put("buildStartedAt", Date.now()); // a genuine in-progress build
+    await ctx.storage.put("messages", [{ role: "user", content: "build it" }]);
     await ctx.storage.put("url", "https://status-site.clydeford.net");
   });
 
@@ -101,6 +103,36 @@ test("history reports build status for reconnecting clients", async () => {
   const body = await res.json<any>();
   expect(body.status).toBe("building");
   expect(body.url).toBe("https://status-site.clydeford.net");
+});
+
+test("history self-heals a stuck 'building' flag so clients don't hang", async () => {
+  const cookie = await login();
+  await SELF.fetch("https://builder.clydeford.net/api/sites", {
+    method: "POST", headers: { cookie, "content-type": "application/json" },
+    body: JSON.stringify({ name: "stuck-site" }),
+  });
+  const stub = env.SITE_SESSION.get(env.SITE_SESSION.idFromName("stuck-site"));
+
+  // Case 1: turn finished (assistant replied) but the status flag wasn't cleared.
+  await runInDurableObject(stub, async (_i: SiteSession, ctx) => {
+    await ctx.storage.put("status", "building");
+    await ctx.storage.put("buildStartedAt", Date.now());
+    await ctx.storage.put("messages", [
+      { role: "user", content: "change it" },
+      { role: "assistant", content: "Done." },
+    ]);
+  });
+  let body = await (await SELF.fetch("https://builder.clydeford.net/api/sites/stuck-site/history", { headers: { cookie } })).json<any>();
+  expect(body.status).toBe("idle"); // self-healed via trailing assistant message
+
+  // Case 2: legacy/dead turn — building flag with no start timestamp.
+  await runInDurableObject(stub, async (_i: SiteSession, ctx) => {
+    await ctx.storage.put("status", "building");
+    await ctx.storage.delete("buildStartedAt");
+    await ctx.storage.put("messages", [{ role: "user", content: "change it" }]);
+  });
+  body = await (await SELF.fetch("https://builder.clydeford.net/api/sites/stuck-site/history", { headers: { cookie } })).json<any>();
+  expect(body.status).toBe("idle"); // self-healed: building with no start timestamp = dead
 });
 
 test("history is empty for a site that was never chatted", async () => {
