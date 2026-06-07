@@ -1,7 +1,7 @@
 import type { Env, SiteRecord } from "./types";
 import { appPage, loginPage, landingPage } from "./ui";
 import {
-  checkPassword,
+  checkAnyPassword,
   signSession,
   verifySession,
   readCookie,
@@ -37,7 +37,12 @@ export default {
         return new Response(loginPage(), { headers: { "content-type": "text/html" } });
       }
       const form = await req.formData();
-      if (checkPassword(String(form.get("password") ?? ""), env.APP_PASSWORD)) {
+      if (
+        checkAnyPassword(String(form.get("password") ?? ""), [
+          env.APP_PASSWORD,
+          env.APP_PASSWORD_2,
+        ])
+      ) {
         const token = await signSession(env.SESSION_SECRET);
         return new Response(null, {
           status: 302,

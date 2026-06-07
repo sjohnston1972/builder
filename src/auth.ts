@@ -35,6 +35,20 @@ export function checkPassword(given: string, actual: string): boolean {
   return timingSafeEqual(given, actual);
 }
 
+// Accept `given` if it matches ANY configured password. Unset/empty entries are
+// skipped so an undefined secret can never become a blank-password bypass. Checks
+// every candidate (no short-circuit) to keep timing independent of which one matched.
+export function checkAnyPassword(
+  given: string,
+  actuals: (string | undefined)[],
+): boolean {
+  let ok = false;
+  for (const actual of actuals) {
+    if (actual && checkPassword(given, actual)) ok = true;
+  }
+  return ok;
+}
+
 function timingSafeEqual(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
   let out = 0;

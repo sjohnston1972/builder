@@ -10,6 +10,7 @@ export interface Env {
   CF_API_TOKEN: string;
   ANTHROPIC_API_KEY: string;
   APP_PASSWORD: string;
+  APP_PASSWORD_2?: string; // optional second accepted login password
   SESSION_SECRET: string;
 }
 
