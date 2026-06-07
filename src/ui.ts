@@ -171,11 +171,19 @@ export function appPage(): string {
   .forge-btn[disabled]{opacity:.45;cursor:not-allowed}
 
   /* ---- onboarding step pulses ---- */
-  @keyframes stepPulse{0%,100%{box-shadow:0 0 0 0 var(--glow)}50%{box-shadow:0 0 0 6px var(--glow)}}
-  .pulse-step{animation:stepPulse 1.7s ease-in-out infinite;border-color:var(--accent)!important}
-  .stephint{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;
+  /* Constant soft glow + tint keeps the active field lit at every frame; the expanding
+     ring adds motion that draws the eye. Brighter, larger and faster than a subtle glow. */
+  @keyframes stepPulse{
+    0%{box-shadow:0 0 16px 2px var(--glow),0 0 0 0 rgba(255,138,61,.6)}
+    70%{box-shadow:0 0 16px 2px var(--glow),0 0 0 12px rgba(255,138,61,0)}
+    100%{box-shadow:0 0 16px 2px var(--glow),0 0 0 0 rgba(255,138,61,0)}
+  }
+  .pulse-step{animation:stepPulse 1.3s ease-out infinite;border-color:var(--accent)!important;
+    background:rgba(255,138,61,.07)}
+  @keyframes hintPulse{0%,100%{opacity:.65}50%{opacity:1}}
+  .stephint{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;
     color:var(--accent2);margin:-2px 0 12px;display:none}
-  .stephint.on{display:block}
+  .stephint.on{display:block;animation:hintPulse 1.3s ease-in-out infinite}
   .stephint b{color:var(--accent)}
 
   .site{display:flex;align-items:center;gap:10px;padding:10px 11px;border-radius:10px;border:1px solid transparent;cursor:pointer;transition:background .12s,border-color .12s}
@@ -428,11 +436,9 @@ const APP_JS = `
     setStep(!$('name').value.trim() ? 1 : (!specEl.value.trim() ? 2 : 0));
   }
 
-  var recoveredOnce=false;
   function renderSites(sites){
     refreshOnboarding();
     siteCount.textContent = sites.length;
-    if(!recoveredOnce){ recoveredOnce=true; maybeRecoverOnLoad(sites); }
     sites.sort(function(a,b){return (b.updatedAt||0)-(a.updatedAt||0);});
     if(!sites.length){ siteList.innerHTML='<div class="empty">No sites yet. Name one and describe it above to forge your first.</div>'; return; }
     siteList.innerHTML='';
@@ -450,7 +456,6 @@ const APP_JS = `
 
   function selectSite(name, url){
     state.active=name;
-    try{ localStorage.setItem('forge_active', name); }catch(e){} // remember for reload recovery
     hTitle.textContent=name; hUrl.textContent=url;
     openLink.href=url; openLink.classList.remove('hidden');
     document.body.classList.add('show-chat'); // mobile: switch to chat view
@@ -552,17 +557,11 @@ const APP_JS = `
     loadHistory(state.active);
   }
 
-  // On (re)load, return the user to their last-open site. selectSite -> loadHistory
-  // reconciles state: if a build is still in progress it shows "finishing…" and polls;
-  // if it finished while away it renders the saved result. Either way you land back on
-  // your site with a working composer, never a blank/disabled app.
-  function maybeRecoverOnLoad(sites){
-    var last; try{ last=localStorage.getItem('forge_active'); }catch(e){}
-    if(!last || state.active) return;
-    var match=sites.filter(function(s){ return s.name===last; })[0];
-    if(!match) return;
-    selectSite(match.name, match.url||('https://'+match.name+'.'+ZONE));
-  }
+  // A fresh (re)load always lands on the forge page — we never auto-jump into a site.
+  // A build keeps running server-side regardless; the user rejoins it by clicking the
+  // site in the list (loadHistory shows "finishing…" and polls if it's still building).
+  // In-session recovery (mobile app-switch / bfcache) is handled by visibilitychange /
+  // pageshow below, which keep the user on the site they were already viewing.
 
   function setPreview(url){
     if(!url){ noprev.style.display='grid'; return; }
