@@ -24,13 +24,20 @@ export class SiteSession extends DurableObject<Env> {
   async getState(): Promise<State> {
     const messages = (await this.ctx.storage.get<StoredMessage[]>("messages")) ?? [];
     let status = (await this.ctx.storage.get<"idle" | "building">("status")) ?? "idle";
-    // A turn appends its assistant reply ONLY after the work (build/deploy) finishes.
-    // So if the last message is from the assistant, the turn is done — even if the
-    // "building" flag is still set because the client disconnected during the finally
-    // and the status:"idle" write didn't land. Deriving doneness from the conversation
-    // keeps reconnecting clients from hanging forever on "finishing your build".
-    if (status === "building" && messages.length && messages[messages.length - 1].role === "assistant") {
-      status = "idle";
+    // Self-heal a stuck "building" flag so reconnecting clients never hang forever on
+    // "finishing your build". A client disconnect can interrupt the finally that resets
+    // status. Two cases:
+    //  1. The turn finished — its assistant reply is appended only after the work
+    //     completes, so a trailing assistant message means we're done.
+    //  2. The turn died mid-flight before replying (e.g. an abandoned/stalled build) —
+    //     bound it by wall-clock: longer than any legitimate turn (model + capped
+    //     build + SSL wait, ~11 min worst case) means it's dead.
+    if (status === "building") {
+      const last = messages[messages.length - 1];
+      const startedAt = (await this.ctx.storage.get<number>("buildStartedAt")) ?? 0;
+      if ((last && last.role === "assistant") || (startedAt && Date.now() - startedAt > 720_000)) {
+        status = "idle";
+      }
     }
     return {
       messages,
@@ -49,6 +56,7 @@ export class SiteSession extends DurableObject<Env> {
     // turn is in progress and poll for the result.
     await this.ctx.storage.put("messages", state.messages);
     await this.ctx.storage.put("status", "building");
+    await this.ctx.storage.put("buildStartedAt", Date.now()); // for the stuck-build backstop in getState
 
     const env = this.env;
     const ctx = this.ctx;
