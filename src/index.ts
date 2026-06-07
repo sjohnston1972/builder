@@ -127,6 +127,20 @@ export default {
       });
     }
 
+    // Mirror a forge's current source to its private GitHub repo on demand. Used by the
+    // one-time backfill (scripts/backfill-forges-to-github.mjs) and for manual re-backup.
+    const backupMatch = path.match(/^\/api\/sites\/([a-z0-9-]+)\/backup$/);
+    if (backupMatch && req.method === "POST") {
+      const name = backupMatch[1];
+      try {
+        const id = env.SITE_SESSION.idFromName(name);
+        const result = await env.SITE_SESSION.get(id).syncToGitHub(name);
+        return json({ ok: true, ...result });
+      } catch (err: any) {
+        return json({ ok: false, error: String(err?.message ?? err) }, 502);
+      }
+    }
+
     const delMatch = path.match(/^\/api\/sites\/([a-z0-9-]+)$/);
     if (delMatch && req.method === "DELETE") {
       const name = delMatch[1];

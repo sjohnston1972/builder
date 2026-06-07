@@ -3,6 +3,7 @@ import type { Env, StoredMessage } from "./types";
 import { streamTurn } from "./anthropic";
 import { deploySite, deployProject, waitUntilLive } from "./deploy";
 import { runBuild } from "./buildclient";
+import { syncForgeToGitHub } from "./github";
 
 // Default Worker module when a project has no custom workerEntry: serve the built SPA.
 const DEFAULT_ASSETS_WORKER =
@@ -19,6 +20,17 @@ export class SiteSession extends DurableObject<Env> {
   // Wipe all stored chat history + script for this site (used on delete).
   async clear(): Promise<void> {
     await this.ctx.storage.deleteAll();
+  }
+
+  // Mirror this forge's current source to GitHub on demand (used by the backup endpoint
+  // and the one-time backfill). Unlike the post-deploy auto-sync this is NOT best-effort:
+  // it throws on failure so the caller can report which forge failed.
+  async syncToGitHub(name: string): Promise<{ repo: string; commit: string }> {
+    const script = await this.ctx.storage.get<string>("script");
+    if (!script) throw new Error(`forge "${name}" has no deployed source to back up yet`);
+    const url =
+      (await this.ctx.storage.get<string>("url")) ?? `https://${name}.${this.env.SITE_ZONE}`;
+    return syncForgeToGitHub(this.env, name, script, url);
   }
 
   async getState(): Promise<State> {
@@ -83,6 +95,7 @@ export class SiteSession extends DurableObject<Env> {
           }
         };
         let assistantText = "";
+        let deployedThisTurn = false;
         try {
           for await (const ev of streamTurn(env, state.messages, state.currentScript)) {
             if (ev.type === "text") {
@@ -95,6 +108,7 @@ export class SiteSession extends DurableObject<Env> {
               state.deployedUrl = url;
               await ctx.storage.put("script", ev.script);
               await ctx.storage.put("url", url);
+              deployedThisTurn = true;
               // Don't claim "live" until the URL actually responds. On a first
               // deploy the edge TLS cert is still provisioning; tell the client
               // it's pending, and report whether it came up within our window.
@@ -131,6 +145,7 @@ export class SiteSession extends DurableObject<Env> {
               state.deployedUrl = url;
               await ctx.storage.put("script", state.currentScript);
               await ctx.storage.put("url", url);
+              deployedThisTurn = true;
               const live = await waitUntilLive(url, { onPending: () => send({ type: "provisioning" }) });
               send({ type: "deployed", url, explanation: ev.explanation, provisioning: !live });
             }
@@ -149,6 +164,16 @@ export class SiteSession extends DurableObject<Env> {
           // Mark the turn done regardless of how it ended, so reconnecting clients
           // stop polling and render the final state.
           await ctx.storage.put("status", "idle");
+          // Best-effort: mirror the freshly deployed source to GitHub. Runs via waitUntil
+          // so it never blocks the response, and any failure is logged, never thrown — a
+          // GitHub outage must not affect the deploy. Skipped entirely if no token is set.
+          if (deployedThisTurn && env.GITHUB_TOKEN && state.currentScript && state.deployedUrl) {
+            ctx.waitUntil(
+              syncForgeToGitHub(env, name, state.currentScript, state.deployedUrl).catch((e) =>
+                console.error(`[github] backup failed for ${name}:`, e),
+              ),
+            );
+          }
           try {
             controller.close();
           } catch {

@@ -12,6 +12,8 @@ export interface Env {
   APP_PASSWORD: string;
   APP_PASSWORD_2?: string; // optional second accepted login password
   SESSION_SECRET: string;
+  GITHUB_TOKEN?: string; // PAT for mirroring forge source to GitHub (optional → backup off)
+  GITHUB_OWNER?: string; // optional org/user to own forge-* repos (defaults to the token's user)
 }
 
 export interface StoredMessage {
