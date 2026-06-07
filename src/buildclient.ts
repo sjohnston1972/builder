@@ -18,12 +18,20 @@ export async function runBuild(
   container: ContainerStub,
   req: BuildRequest,
   onLog: (line: string) => void,
+  opts: { timeoutMs?: number } = {},
 ): Promise<BuildResult> {
+  // Hard overall cap so a stalled container (a stream that stays open but stops
+  // emitting) can never hang the turn — and thus the site's status — forever.
+  const timeoutMs = opts.timeoutMs ?? 480_000; // 8 min
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), timeoutMs);
+  try {
   const res = await container.fetch(
     new Request("http://buildbox/build", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(req),
+      signal: ac.signal,
     }),
   );
   if (!res.body) return { ok: false, error: `build server returned ${res.status}` };
@@ -60,4 +68,9 @@ export async function runBuild(
     }
   }
   return result;
+  } catch (e: any) {
+    return { ok: false, error: ac.signal.aborted ? `build timed out after ${timeoutMs / 1000}s` : String(e?.message ?? e) };
+  } finally {
+    clearTimeout(timer);
+  }
 }

@@ -552,17 +552,16 @@ const APP_JS = `
     loadHistory(state.active);
   }
 
-  // On first load, if the last-open site has a build in progress, rejoin it.
+  // On (re)load, return the user to their last-open site. selectSite -> loadHistory
+  // reconciles state: if a build is still in progress it shows "finishing…" and polls;
+  // if it finished while away it renders the saved result. Either way you land back on
+  // your site with a working composer, never a blank/disabled app.
   function maybeRecoverOnLoad(sites){
     var last; try{ last=localStorage.getItem('forge_active'); }catch(e){}
     if(!last || state.active) return;
     var match=sites.filter(function(s){ return s.name===last; })[0];
     if(!match) return;
-    api('/api/sites/'+last+'/history').then(function(r){ return r.json(); }).then(function(d){
-      if(d && d.status==='building' && !state.active){
-        selectSite(match.name, match.url||('https://'+match.name+'.'+ZONE));
-      }
-    }).catch(function(){});
+    selectSite(match.name, match.url||('https://'+match.name+'.'+ZONE));
   }
 
   function setPreview(url){
@@ -599,7 +598,7 @@ const APP_JS = `
 
   function sendMessage(text){
     if(state.busy||!state.active) return;
-    state.busy=true; state.building=true; state.streamLost=false; send.disabled=true; input.disabled=true;
+    state.busy=true; state.building=true; state.streamLost=false; state.lastEventAt=Date.now(); send.disabled=true; input.disabled=true;
     var ub=bubble('user','you'); ub.textContent=text;
     var bb=bubble('bot','forge'); bb.classList.add('cursor');
     setPill('work','thinking');
@@ -611,6 +610,7 @@ const APP_JS = `
         function pump(){
           return reader.read().then(function(res){
             if(res.done){ finish(); return; }
+            state.lastEventAt=Date.now(); // mark stream alive (used to detect a stale/dead stream on return)
             buf+=dec.decode(res.value,{stream:true});
             var parts=buf.split('\\n\\n'); buf=parts.pop();
             parts.forEach(function(line){
@@ -722,8 +722,12 @@ const APP_JS = `
   specEl.addEventListener('input', refreshOnboarding);
   $('refresh').addEventListener('click', function(){ if(state.active) setPreview('https://'+state.active+'.'+ZONE); });
   document.addEventListener('visibilitychange', function(){
-    // Returned to foreground after the stream was lost (backgrounding aborts it) → rejoin.
-    if(document.visibilityState==='visible' && state.active && state.building && state.streamLost) recover();
+    // Returned to foreground mid-build. The stream is often dead after a background
+    // (mobile app-switch / screen sleep) but its rejection may not have fired yet, so
+    // don't rely on streamLost alone — also rejoin if the stream has gone stale
+    // (no data for >20s), which a healthy build never is. Avoids clobbering a live stream.
+    if(document.visibilityState==='visible' && state.active && state.building &&
+       (state.streamLost || (Date.now()-(state.lastEventAt||0) > 20000))) recover();
   });
   window.addEventListener('pageshow', function(e){
     // Restored from bfcache/freeze (mobile screen sleep / back-forward) → the stream is dead; rejoin.

@@ -22,11 +22,31 @@ export class SiteSession extends DurableObject<Env> {
   }
 
   async getState(): Promise<State> {
+    const messages = (await this.ctx.storage.get<StoredMessage[]>("messages")) ?? [];
+    let status = (await this.ctx.storage.get<"idle" | "building">("status")) ?? "idle";
+    // Self-heal a stuck "building" flag so reconnecting clients never hang forever on
+    // "finishing your build". A client disconnect can interrupt the finally that resets
+    // status. Two cases:
+    //  1. The turn finished — its assistant reply is appended only after the work
+    //     completes, so a trailing assistant message means we're done.
+    //  2. The turn died mid-flight before replying (e.g. an abandoned/stalled build) —
+    //     bound it by wall-clock: longer than any legitimate turn (model + capped
+    //     build + SSL wait, ~11 min worst case) means it's dead.
+    if (status === "building") {
+      const last = messages[messages.length - 1];
+      const startedAt = (await this.ctx.storage.get<number>("buildStartedAt")) ?? 0;
+      // idle if: the turn replied (assistant last); OR no start timestamp (a legacy/dead
+      // turn — new turns always write buildStartedAt before status); OR it's been longer
+      // than any legitimate turn.
+      if ((last && last.role === "assistant") || !startedAt || Date.now() - startedAt > 720_000) {
+        status = "idle";
+      }
+    }
     return {
-      messages: (await this.ctx.storage.get<StoredMessage[]>("messages")) ?? [],
+      messages,
       currentScript: (await this.ctx.storage.get<string>("script")) ?? null,
       deployedUrl: (await this.ctx.storage.get<string>("url")) ?? null,
-      status: (await this.ctx.storage.get<"idle" | "building">("status")) ?? "idle",
+      status,
     };
   }
 
@@ -38,6 +58,9 @@ export class SiteSession extends DurableObject<Env> {
     // reconnects mid-build (mobile app-switch, screen sleep, reload) can see the
     // turn is in progress and poll for the result.
     await this.ctx.storage.put("messages", state.messages);
+    // Write buildStartedAt BEFORE status so a reader can never observe status="building"
+    // without a timestamp (which getState treats as a dead/legacy turn).
+    await this.ctx.storage.put("buildStartedAt", Date.now());
     await this.ctx.storage.put("status", "building");
 
     const env = this.env;
@@ -115,7 +138,13 @@ export class SiteSession extends DurableObject<Env> {
           state.messages.push({ role: "assistant", content: assistantText || "(deployed)" });
           await ctx.storage.put("messages", state.messages);
         } catch (err: any) {
-          send({ type: "error", message: String(err?.message ?? err) });
+          const msg = String(err?.message ?? err);
+          send({ type: "error", message: msg });
+          // Persist an assistant turn so the conversation reflects a finished (failed)
+          // turn. This also lets getState() derive "idle" if the status write below is
+          // interrupted by a client disconnect.
+          state.messages.push({ role: "assistant", content: assistantText ? `${assistantText}\n[error: ${msg}]` : `[error: ${msg}]` });
+          await ctx.storage.put("messages", state.messages);
         } finally {
           // Mark the turn done regardless of how it ended, so reconnecting clients
           // stop polling and render the final state.
