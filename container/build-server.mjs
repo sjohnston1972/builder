@@ -6,7 +6,7 @@ import { join } from "node:path";
 const PORT = process.env.PORT || 8080;
 
 const WORK = "/srv/work";
-const BUILD_TIMEOUT_MS = 120_000;
+const BUILD_TIMEOUT_MS = 240_000; // per command; generous headroom for large dep trees
 
 function runStreaming(cmd, args, cwd, onLine) {
   return new Promise((resolve) => {

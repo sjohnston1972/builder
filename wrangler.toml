@@ -29,6 +29,9 @@ name = "builder-buildbox"
 class_name = "BuildBox"
 image = "./container/Dockerfile"
 max_instances = 5
+# "lite" (256 MiB / 1/16 vCPU) OOM-kills real npm installs (react-markdown's tree
+# peaks well past 256 MiB) and is too slow (1/16 vCPU). "standard" = 4 GiB / 1/2 vCPU.
+instance_type = "standard"
 
 [[durable_objects.bindings]]
 name = "BUILD_BOX"
