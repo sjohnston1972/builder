@@ -1,7 +1,12 @@
 import { DurableObject } from "cloudflare:workers";
 import type { Env, StoredMessage } from "./types";
 import { streamTurn } from "./anthropic";
-import { deploySite } from "./deploy";
+import { deploySite, deployProject, waitUntilLive } from "./deploy";
+import { runBuild } from "./buildclient";
+
+// Default Worker module when a project has no custom workerEntry: serve the built SPA.
+const DEFAULT_ASSETS_WORKER =
+  `export default { fetch(request, env) { return env.ASSETS.fetch(request); } };`;
 
 interface State {
   messages: StoredMessage[];
@@ -67,7 +72,44 @@ export class SiteSession extends DurableObject<Env> {
               state.deployedUrl = url;
               await ctx.storage.put("script", ev.script);
               await ctx.storage.put("url", url);
-              send({ type: "deployed", url, explanation: ev.explanation });
+              // Don't claim "live" until the URL actually responds. On a first
+              // deploy the edge TLS cert is still provisioning; tell the client
+              // it's pending, and report whether it came up within our window.
+              const live = await waitUntilLive(url, {
+                onPending: () => send({ type: "provisioning" }),
+              });
+              send({ type: "deployed", url, explanation: ev.explanation, provisioning: !live });
+            } else if (ev.type === "deploy_project") {
+              send({ type: "building_project" });
+              const container = env.BUILD_BOX.get(env.BUILD_BOX.idFromName(name));
+              const result = await runBuild(
+                container,
+                {
+                  siteName: name,
+                  files: ev.files,
+                  installCommand: ev.installCommand,
+                  buildCommand: ev.buildCommand,
+                  outputDir: ev.outputDir,
+                },
+                (line) => send({ type: "build_log", line }),
+              );
+              if (!result.ok || !result.assets) {
+                const errMsg = result.error ?? "build failed";
+                send({ type: "build_failed", error: errMsg });
+                // Record the failure so the model can fix it next turn; keep previous deploy live.
+                assistantText += `${assistantText ? "\n" : ""}[build failed: ${errMsg}]`;
+                continue;
+              }
+              const workerScript = ev.workerEntry
+                ? (ev.files.find((f: { path: string; content: string }) => f.path === ev.workerEntry)?.content ?? DEFAULT_ASSETS_WORKER)
+                : DEFAULT_ASSETS_WORKER;
+              const url = await deployProject(env, name, workerScript, result.assets);
+              state.currentScript = JSON.stringify({ files: ev.files });
+              state.deployedUrl = url;
+              await ctx.storage.put("script", state.currentScript);
+              await ctx.storage.put("url", url);
+              const live = await waitUntilLive(url, { onPending: () => send({ type: "provisioning" }) });
+              send({ type: "deployed", url, explanation: ev.explanation, provisioning: !live });
             }
           }
           state.messages.push({ role: "assistant", content: assistantText || "(deployed)" });

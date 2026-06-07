@@ -1,0 +1,60 @@
+import { mkdir, writeFile, readdir, readFile, rm } from "node:fs/promises";
+import { dirname, join, resolve, relative, isAbsolute, extname } from "node:path";
+
+const TYPES = {
+  ".html": "text/html", ".css": "text/css", ".js": "text/javascript",
+  ".mjs": "text/javascript", ".json": "application/json", ".svg": "image/svg+xml",
+  ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+  ".gif": "image/gif", ".webp": "image/webp", ".ico": "image/x-icon",
+  ".woff": "font/woff", ".woff2": "font/woff2", ".txt": "text/plain",
+  ".map": "application/json", ".wasm": "application/wasm",
+};
+
+export function contentType(p) {
+  return TYPES[extname(p).toLowerCase()] || "application/octet-stream";
+}
+
+export async function writeFiles(root, files) {
+  for (const f of files) {
+    const target = resolve(root, f.path);
+    const rel = relative(resolve(root), target);
+    if (rel === "" || rel.startsWith("..") || isAbsolute(rel)) throw new Error(`unsafe path: ${f.path}`);
+    await mkdir(dirname(target), { recursive: true });
+    await writeFile(target, f.content, "utf8");
+  }
+}
+
+export async function collectAssets(distDir) {
+  const out = [];
+  async function walk(dir) {
+    for (const entry of await readdir(dir, { withFileTypes: true })) {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) { await walk(full); continue; }
+      const buf = await readFile(full);
+      const rel = "/" + relative(distDir, full).split("\\").join("/");
+      out.push({ path: rel, contentBase64: buf.toString("base64"), contentType: contentType(rel) });
+    }
+  }
+  await walk(distDir);
+  return out;
+}
+
+// Clear a work dir before a fresh build, preserving node_modules (warm dependency cache).
+export async function cleanWorkDir(root) {
+  let entries;
+  try { entries = await readdir(root); } catch { return; } // dir doesn't exist yet — nothing to clean
+  await Promise.all(
+    entries.filter((e) => e !== "node_modules").map((e) => rm(join(root, e), { recursive: true, force: true })),
+  );
+}
+
+const ALLOWED_BINS = new Set(["npm", "pnpm", "yarn", "npx", "node"]);
+// Split a build/install command into [bin, ...args] and reject non-package-manager binaries.
+// NOTE: simple whitespace split — arguments containing spaces are not supported (defaults don't need them).
+export function parseCommand(command) {
+  const parts = String(command).trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0 || !ALLOWED_BINS.has(parts[0])) {
+    throw new Error(`disallowed command: ${parts[0] ?? "(empty)"}`);
+  }
+  return parts;
+}

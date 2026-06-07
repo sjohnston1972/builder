@@ -13,3 +13,10 @@ test("app page has chat + preview + new-site form", () => {
   expect(html).toContain('id="preview"');
   expect(html).toContain('id="new-site"');
 });
+test("appPage handles framework build SSE events", () => {
+  const html = appPage();
+  expect(html).toContain("building_project");
+  expect(html).toContain("build_log");
+  expect(html).toContain("build_failed");
+  expect(html).toContain("buildlog");
+});

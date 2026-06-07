@@ -248,6 +248,12 @@ export function appPage(): string {
   .announce .open{background:var(--accent);color:#1a1205;font-family:var(--disp);font-weight:700;font-size:13.5px;
     padding:10px 16px;border-radius:10px;text-decoration:none;white-space:nowrap;transition:filter .15s,transform .1s}
   .announce .open:hover{filter:brightness(1.08)}.announce .open:active{transform:translateY(1px)}
+  .announce.prov{align-items:flex-start}
+  .announce .note{font-family:var(--mono);font-size:11px;line-height:1.55;color:var(--accent2);margin-top:8px;white-space:normal}
+  .buildlog{align-self:flex-start;max-width:min(94%,560px);background:#0a0b0e;border:1px solid var(--line);
+    border-radius:12px;padding:10px 12px;font-family:var(--mono);font-size:11px;line-height:1.5;
+    color:var(--muted);white-space:pre-wrap;max-height:220px;overflow:auto}
+  .buildlog.fail{border-color:var(--err);color:var(--err)}
 
   /* ---- confetti burst ---- */
   .confetti{position:fixed;inset:0;pointer-events:none;z-index:60;overflow:hidden}
@@ -534,6 +540,7 @@ const APP_JS = `
   // Came back to the app (foreground / bfcache restore) after losing a build's stream.
   function recover(){
     if(!state.active || !state.building) return;
+    window.__bl=null; // detached by the chat clear below — drop the stale ref so a new build log is created
     chat.innerHTML='';
     loadHistory(state.active);
   }
@@ -622,18 +629,48 @@ const APP_JS = `
               setTimeout(function(){ v.textContent=BUILD_VERBS[vi]+'…'; v.style.opacity='1'; }, 180);
             }, 1100);
           }
+          else if(ev.type==='provisioning'){
+            // Worker is deployed, but the edge TLS cert for a brand-new
+            // subdomain is still being issued. Tell the user it's first-deploy.
+            stopVerbs(); setPill('work','provisioning');
+            if(deployEl){
+              var v=deployEl.querySelector('.verb');
+              if(v) v.textContent='Provisioning TLS certificate — first deploys can take a few minutes…';
+            }
+          }
+          else if(ev.type==='building_project'){
+            stopVerbs(); setPill('work','building');
+            if(!window.__bl){
+              window.__bl=document.createElement('div'); window.__bl.className='buildlog';
+              chat.appendChild(window.__bl);
+            }
+            window.__bl.textContent='Building project…\\n';
+            chat.scrollTop=chat.scrollHeight;
+          }
+          else if(ev.type==='build_log'){
+            if(window.__bl){ window.__bl.textContent+=ev.line+'\\n'; window.__bl.scrollTop=window.__bl.scrollHeight; }
+          }
+          else if(ev.type==='build_failed'){
+            stopVerbs(); state.building=false; setPill('','error');
+            if(window.__bl){ window.__bl.className='buildlog fail'; window.__bl.textContent+='\\n▲ '+ev.error+'\\n'; }
+            window.__bl=null;
+          }
           else if(ev.type==='deployed'){
             stopVerbs(); setPill('live','live');
             var host=ev.url.replace('https://','');
             if(deployEl){
-              deployEl.className='announce';
+              deployEl.className='announce'+(ev.provisioning?' prov':'');
+              var note=ev.provisioning
+                ? '<div class="note">⏳ First deploy — SSL is still activating. Your site can take a few minutes to load; refresh the page if it doesn\\'t open right away.</div>'
+                : '';
               deployEl.innerHTML='<span class="spark">✦</span>'
-                +'<div class="body"><div class="title">Your site is live</div>'
-                +'<div class="url">'+host+'</div></div>'
+                +'<div class="body"><div class="title">'+(ev.provisioning?'Your site is almost live':'Your site is live')+'</div>'
+                +'<div class="url">'+host+'</div>'+note+'</div>'
                 +'<a class="open" href="'+ev.url+'" target="_blank" rel="noopener">Open ↗</a>';
             }
             confetti();
             setTimeout(function(){ setPreview(ev.url); }, 1200);
+            window.__bl=null;
           }
           else if(ev.type==='error'){ stopVerbs(); state.building=false; setPill('','error'); var eb=bubble('sys',''); eb.style.color='var(--err)'; eb.textContent='▲ '+ev.message; }
         }

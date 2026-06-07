@@ -18,7 +18,8 @@
 
 **Create:**
 - `container/Dockerfile` — slim Node image running the build server.
-- `container/build-server.mjs` — plain-Node HTTP server; `POST /build` runs install+build, streams NDJSON.
+- `container/build-server.mjs` — plain-Node HTTP entry; wires `POST /build` to build-lib, streams NDJSON. Importing it starts the server, so it is NOT imported by tests.
+- `container/build-lib.mjs` — pure, importable helpers (file write, asset collection, content types). Tested directly under the Node vitest project. No HTTP/side effects at import.
 - `container/package.json` — pins the build server's own (zero) deps + node version marker.
 - `src/buildbox.ts` — `BuildBox` Container class (extends `@cloudflare/containers` `Container`).
 - `src/assets.ts` — pure helpers: asset hashing, manifest building, `uploadAssets()` (REST upload flow).
@@ -30,6 +31,7 @@
 
 **Modify:**
 - `package.json` — add `@cloudflare/containers` dependency.
+- `vitest.config.ts` — split into two projects: a Workers project (existing src tests) and a Node project (`tests/buildserver.test.ts`, `tests/integration/**`) so Node-only tests run under the node environment.
 - `wrangler.toml` — add `[[containers]]`, BuildBox DO binding + migration.
 - `src/types.ts` — add `BUILD_BOX` binding; build event/result types.
 - `src/prompts.ts` — add `DEPLOY_PROJECT_TOOL`; extend `SYSTEM_PROMPT`.
@@ -186,15 +188,61 @@ git commit -m "feat: scaffold BuildBox container (access check passes, health en
 
 ## Phase 1 — Build server `/build`
 
-### Task 2: Build-server pure helpers (write files, collect output)
+### Task 2: Node vitest project + build-server pure helpers
 
 **Files:**
-- Modify: `container/build-server.mjs`
+- Modify: `vitest.config.ts`, `container/Dockerfile`
+- Create: `container/build-lib.mjs`
 - Test: `tests/buildserver.test.ts`
 
-These helpers are exported from a module so they can be unit-tested under node without Docker.
+Helpers live in an importable, side-effect-free module (`build-lib.mjs`) so they can be unit-tested under Node without starting the HTTP server or needing Docker. The Workers vitest pool can't run Node built-ins, so Node-only tests get their own vitest project.
 
-- [ ] **Step 1: Write failing tests for the helpers**
+- [ ] **Step 1: Split vitest into Workers + Node projects**
+
+Replace `vitest.config.ts` with:
+
+```ts
+import { defineConfig } from "vitest/config";
+import { defineWorkersProject } from "@cloudflare/vitest-pool-workers/config";
+
+export default defineConfig({
+  test: {
+    projects: [
+      defineWorkersProject({
+        test: {
+          name: "workers",
+          include: ["tests/**/*.test.ts"],
+          exclude: ["tests/buildserver.test.ts", "tests/integration/**", "**/node_modules/**"],
+          poolOptions: {
+            workers: {
+              wrangler: { configPath: "./wrangler.toml" },
+              miniflare: {
+                bindings: {
+                  CF_API_TOKEN: "test-token",
+                  ANTHROPIC_API_KEY: "test-anthropic",
+                  APP_PASSWORD: "test-pass",
+                  SESSION_SECRET: "test-secret-0123456789",
+                },
+              },
+            },
+          },
+        },
+      }),
+      {
+        test: {
+          name: "node",
+          environment: "node",
+          include: ["tests/buildserver.test.ts", "tests/integration/**/*.test.ts"],
+        },
+      },
+    ],
+  },
+});
+```
+
+Run: `npm test` — expected: the existing 29 tests still pass (now under the "workers" project; the "node" project finds no tests yet). If existing tests break, fix the config before continuing.
+
+- [ ] **Step 2: Write failing tests for the helpers**
 
 Create `tests/buildserver.test.ts`:
 
@@ -203,7 +251,7 @@ import { afterEach, expect, test } from "vitest";
 import { mkdtempSync, rmSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { writeFiles, collectAssets, contentType } from "../container/build-server.mjs";
+import { writeFiles, collectAssets, contentType } from "../container/build-lib.mjs";
 
 let dirs: string[] = [];
 const tmp = () => { const d = mkdtempSync(join(tmpdir(), "bb-")); dirs.push(d); return d; };
@@ -245,14 +293,14 @@ test("contentType maps common extensions", () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [ ] **Step 3: Run to verify it fails**
 
-Run: `npx vitest run tests/buildserver.test.ts`
-Expected: FAIL — exports `writeFiles`/`collectAssets`/`contentType` do not exist.
+Run: `npx vitest run --project node tests/buildserver.test.ts`
+Expected: FAIL — module `../container/build-lib.mjs` not found / exports missing.
 
-- [ ] **Step 3: Implement the helpers**
+- [ ] **Step 4: Implement the helpers in build-lib.mjs**
 
-Edit `container/build-server.mjs` — add above the server, and export them:
+Create `container/build-lib.mjs`:
 
 ```js
 import { mkdir, writeFile, readdir, readFile } from "node:fs/promises";
@@ -296,16 +344,30 @@ export async function collectAssets(distDir) {
 }
 ```
 
-- [ ] **Step 4: Run to verify pass**
+- [ ] **Step 5: Make build-server.mjs import the helpers and ship them in the image**
 
-Run: `npx vitest run tests/buildserver.test.ts`
-Expected: PASS (4 tests).
+Edit `container/build-server.mjs` — add at the top so the helpers are available for Task 3 (no behavior change yet):
 
-- [ ] **Step 5: Commit**
+```js
+import { writeFiles, collectAssets, contentType } from "./build-lib.mjs";
+```
+
+Edit `container/Dockerfile` — add a COPY so the new module is in the image (place it next to the existing `COPY build-server.mjs ./`):
+
+```dockerfile
+COPY build-lib.mjs ./
+```
+
+- [ ] **Step 6: Run to verify pass**
+
+Run: `npm test`
+Expected: node project PASS (4 buildserver tests) + workers project PASS (29). All green.
+
+- [ ] **Step 7: Commit**
 
 ```bash
-git add container/build-server.mjs tests/buildserver.test.ts
-git commit -m "feat: build-server file-write + asset-collection helpers"
+git add vitest.config.ts container/build-lib.mjs container/build-server.mjs container/Dockerfile tests/buildserver.test.ts
+git commit -m "feat: node vitest project + build-lib file/asset helpers"
 ```
 
 ### Task 3: Build-server `/build` endpoint with NDJSON streaming
@@ -317,11 +379,12 @@ No unit test here (it spawns processes — covered by the Docker-gated integrati
 
 - [ ] **Step 1: Implement `/build`**
 
-Edit `container/build-server.mjs` — replace the request handler body with:
+Edit `container/build-server.mjs` — add these imports (the helpers `writeFiles`/`collectAssets` are already imported from `./build-lib.mjs` per Task 2 Step 5) and replace the request handler body with the handler below:
 
 ```js
 import { spawn } from "node:child_process";
 import { rm } from "node:fs/promises";
+import { join } from "node:path";
 
 const WORK = "/srv/work";
 const BUILD_TIMEOUT_MS = 120_000;

@@ -2,6 +2,7 @@ import type { SiteSession } from "./session";
 
 export interface Env {
   SITE_SESSION: DurableObjectNamespace<SiteSession>;
+  BUILD_BOX: DurableObjectNamespace<import("./buildbox").BuildBox>;
   SITES: KVNamespace;
   CF_ACCOUNT_ID: string;
   ZONE_ID: string;

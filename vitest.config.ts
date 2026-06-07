@@ -1,19 +1,36 @@
-import { defineWorkersConfig } from "@cloudflare/vitest-pool-workers/config";
+import { defineConfig } from "vitest/config";
+import { defineWorkersProject } from "@cloudflare/vitest-pool-workers/config";
 
-export default defineWorkersConfig({
+export default defineConfig({
   test: {
-    poolOptions: {
-      workers: {
-        wrangler: { configPath: "./wrangler.toml" },
-        miniflare: {
-          bindings: {
-            CF_API_TOKEN: "test-token",
-            ANTHROPIC_API_KEY: "test-anthropic",
-            APP_PASSWORD: "test-pass",
-            SESSION_SECRET: "test-secret-0123456789",
+    workspace: [
+      defineWorkersProject({
+        test: {
+          name: "workers",
+          include: ["tests/**/*.test.ts"],
+          exclude: ["tests/buildserver.test.ts", "tests/integration/**", "**/node_modules/**"],
+          poolOptions: {
+            workers: {
+              wrangler: { configPath: "./wrangler.toml" },
+              miniflare: {
+                bindings: {
+                  CF_API_TOKEN: "test-token",
+                  ANTHROPIC_API_KEY: "test-anthropic",
+                  APP_PASSWORD: "test-pass",
+                  SESSION_SECRET: "test-secret-0123456789",
+                },
+              },
+            },
           },
         },
+      }),
+      {
+        test: {
+          name: "node",
+          environment: "node",
+          include: ["tests/buildserver.test.ts", "tests/integration/**/*.test.ts"],
+        },
       },
-    },
+    ],
   },
 });

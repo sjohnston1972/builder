@@ -36,11 +36,62 @@ AI-powered sites:
 - Default model \`claude-haiku-4-5\` (fast, cheap) for chatbots; use \`claude-sonnet-4-6\`
   when the user wants higher quality. Put any character/persona in the \`system\` field.
 
+Two ways to ship:
+- deploy_worker — a single self-contained Worker file. Use for simple sites (landing pages,
+  small tools, single-file AI chatbots). Fast: no build step.
+- deploy_project — a multi-file project that needs a build (npm dependencies, a framework, a
+  bundler). DEFAULT STACK: React + Vite + Tailwind. Provide every file in files[], including a
+  package.json with the build script. The build runs in a Node 22 container (npm install, then
+  npm run build) and the outputDir (default dist) is served as static assets.
+  - For server/API routes, add a Worker entry file and pass its path as workerEntry; it receives
+    env.ANTHROPIC_API_KEY and env.ASSETS (call env.ASSETS.fetch(request) to serve the SPA).
+    IMPORTANT: the workerEntry is uploaded AS-IS — it is NOT bundled or transpiled. It MUST be a
+    single self-contained .js/.mjs ES module: plain JavaScript only (no TypeScript), and no imports
+    of other project files (Web/Workers APIs and a default export are fine). Omit workerEntry for a
+    pure static SPA (the assets are served automatically).
+  - Choose deploy_project ONLY when a build is genuinely needed; otherwise prefer deploy_worker.
+
 Conversation flow:
 - Discuss briefly with the user, then when you have something to ship, CALL the deploy_worker tool.
 - The 'script' argument must be the ENTIRE worker file, ready to deploy as-is.
 - After deploying, summarize what you built in one or two sentences.
 - When the user asks for changes, edit the current script and deploy again.`;
+
+export const DEPLOY_PROJECT_TOOL = {
+  name: "deploy_project",
+  description:
+    "Build and deploy a multi-file framework project (npm dependencies + a build step, e.g. React+Vite). " +
+    "Use this when the site needs a framework, npm packages, or a bundler. For a simple single-file site, use deploy_worker instead.",
+  input_schema: {
+    type: "object" as const,
+    properties: {
+      explanation: { type: "string", description: "One sentence on what changed." },
+      files: {
+        type: "array",
+        description: "Every source file of the project, including package.json, vite.config, index.html, and src/**.",
+        items: {
+          type: "object" as const,
+          properties: {
+            path: { type: "string", description: "Repo-relative path, e.g. src/App.tsx" },
+            content: { type: "string" },
+          },
+          required: ["path", "content"],
+        },
+      },
+      installCommand: { type: "string", description: "Default: npm install --no-audit --no-fund" },
+      buildCommand: { type: "string", description: "Default: npm run build" },
+      outputDir: { type: "string", description: "Build output directory. Default: dist" },
+      workerEntry: {
+        type: "string",
+        description:
+          "Optional path of a file (already included in files[]) to use as the Worker module for /api routes. " +
+          "Must be a single self-contained .js/.mjs ES module (plain JS, no TypeScript, no imports of other project files) — it is uploaded as-is, NOT bundled. " +
+          "It receives env.ANTHROPIC_API_KEY and env.ASSETS. Omit for a pure static site.",
+      },
+    },
+    required: ["explanation", "files"],
+  },
+};
 
 export const DEPLOY_TOOL = {
   name: "deploy_worker",

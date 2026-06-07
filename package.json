@@ -9,11 +9,13 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.100.1"
+    "@anthropic-ai/sdk": "^0.100.1",
+    "@cloudflare/containers": "^0.3.7"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "0.8.19",
     "@cloudflare/workers-types": "^4.20241218.0",
+    "@types/node": "^25.9.2",
     "playwright": "^1.60.0",
     "typescript": "^5.7.2",
     "vitest": "3.1.4",
