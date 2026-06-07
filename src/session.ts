@@ -22,11 +22,21 @@ export class SiteSession extends DurableObject<Env> {
   }
 
   async getState(): Promise<State> {
+    const messages = (await this.ctx.storage.get<StoredMessage[]>("messages")) ?? [];
+    let status = (await this.ctx.storage.get<"idle" | "building">("status")) ?? "idle";
+    // A turn appends its assistant reply ONLY after the work (build/deploy) finishes.
+    // So if the last message is from the assistant, the turn is done — even if the
+    // "building" flag is still set because the client disconnected during the finally
+    // and the status:"idle" write didn't land. Deriving doneness from the conversation
+    // keeps reconnecting clients from hanging forever on "finishing your build".
+    if (status === "building" && messages.length && messages[messages.length - 1].role === "assistant") {
+      status = "idle";
+    }
     return {
-      messages: (await this.ctx.storage.get<StoredMessage[]>("messages")) ?? [],
+      messages,
       currentScript: (await this.ctx.storage.get<string>("script")) ?? null,
       deployedUrl: (await this.ctx.storage.get<string>("url")) ?? null,
-      status: (await this.ctx.storage.get<"idle" | "building">("status")) ?? "idle",
+      status,
     };
   }
 
@@ -115,7 +125,13 @@ export class SiteSession extends DurableObject<Env> {
           state.messages.push({ role: "assistant", content: assistantText || "(deployed)" });
           await ctx.storage.put("messages", state.messages);
         } catch (err: any) {
-          send({ type: "error", message: String(err?.message ?? err) });
+          const msg = String(err?.message ?? err);
+          send({ type: "error", message: msg });
+          // Persist an assistant turn so the conversation reflects a finished (failed)
+          // turn. This also lets getState() derive "idle" if the status write below is
+          // interrupted by a client disconnect.
+          state.messages.push({ role: "assistant", content: assistantText ? `${assistantText}\n[error: ${msg}]` : `[error: ${msg}]` });
+          await ctx.storage.put("messages", state.messages);
         } finally {
           // Mark the turn done regardless of how it ended, so reconnecting clients
           // stop polling and render the final state.
