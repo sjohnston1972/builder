@@ -517,23 +517,30 @@ const APP_JS = `
 
   function pollStatus(name){
     pollStop();
-    var tries=0;
+    // The server keeps status "building" for the whole turn: model + container build
+    // (npm install + bundle, can be minutes on a cold container) + up to ~90s of SSL
+    // readiness polling. So keep polling until it flips to idle, well past any real
+    // build window, instead of giving up at ~150s. Gentle backoff after the first 60s.
+    var start=Date.now();
+    var MAX_MS=900000; // 15 min — safely exceeds the worst-case server build window
     (function loop(){
+      var interval=(Date.now()-start)<60000 ? 2500 : 5000;
       pollTimer=setTimeout(function(){
         if(state.active!==name) return;
         api('/api/sites/'+name+'/history')
           .then(function(r){ return r.json(); })
           .then(function(d){
             if(state.active!==name) return;
-            if(d.status==='building' && ++tries<60){ loop(); return; } // ~150s max
+            var expired=(Date.now()-start)>=MAX_MS;
+            if(d.status==='building' && !expired){ loop(); return; }
             chat.innerHTML='';
             renderHistory(d.messages||[]);
-            sysLine(d.status==='building' ? '▸ still building — tap a site again to refresh' : '▸ build finished');
+            sysLine(d.status==='building' ? '▸ still building — tap the site again to refresh' : '▸ build finished');
             finalizeIdle(d);
             chat.scrollTop=chat.scrollHeight;
           })
-          .catch(function(){ if(++tries<60){ loop(); } else { finalizeIdle(null); } });
-      }, 2500);
+          .catch(function(){ if((Date.now()-start)<MAX_MS){ loop(); } else { finalizeIdle(null); } });
+      }, interval);
     })();
   }
 
