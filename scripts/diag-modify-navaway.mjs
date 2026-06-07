@@ -27,7 +27,7 @@ try {
   await page.locator("#siteList .site", { hasText: NAME }).first().click();
   await page.waitForTimeout(1200);
   log("selected " + NAME + "; sending a modify");
-  await page.fill("#input", "Tiny tweak: add a small footer that says 'updated'.");
+  await page.fill("#input", process.env.MSG || "Change the 'Markdown Studio' heading color to teal.");
   await page.click("#send");
 
   // wait until the build is underway
