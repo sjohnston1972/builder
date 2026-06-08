@@ -27,7 +27,7 @@ test("yields text then tool deploy event", async () => {
 
   const env = { ANTHROPIC_API_KEY: "k" } as any;
   const events: any[] = [];
-  for await (const ev of streamTurn(env, [{ role: "user", content: "make a site" }], null)) {
+  for await (const ev of streamTurn(env, [{ role: "user", content: "make a site" }], null, "mysite")) {
     events.push(ev);
   }
   const text = events.filter((e) => e.type === "text").map((e) => e.text).join("");
@@ -58,7 +58,7 @@ test("yields deploy_project event from a deploy_project tool_use", async () => {
 
   const env = { ANTHROPIC_API_KEY: "k" } as any;
   const events: any[] = [];
-  for await (const ev of streamTurn(env, [{ role: "user", content: "build a react app" }], null)) {
+  for await (const ev of streamTurn(env, [{ role: "user", content: "build a react app" }], null, "reactsite")) {
     events.push(ev);
   }
   const dp = events.find((e) => e.type === "deploy_project");

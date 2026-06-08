@@ -97,7 +97,7 @@ export class SiteSession extends DurableObject<Env> {
         let assistantText = "";
         let deployedThisTurn = false;
         try {
-          for await (const ev of streamTurn(env, state.messages, state.currentScript)) {
+          for await (const ev of streamTurn(env, state.messages, state.currentScript, name)) {
             if (ev.type === "text") {
               assistantText += ev.text;
               send({ type: "text", text: ev.text });

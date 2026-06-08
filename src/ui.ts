@@ -268,8 +268,16 @@ export function appPage(): string {
   .confetti{position:fixed;inset:0;pointer-events:none;z-index:60;overflow:hidden}
   .confetti i{position:absolute;top:46%;left:50%;width:9px;height:9px;border-radius:2px;animation:conf 1s ease-out forwards}
   @keyframes conf{0%{opacity:1;transform:translate(-50%,-50%)}100%{opacity:0;transform:translate(calc(-50% + var(--x)),calc(-50% + var(--y))) rotate(var(--r))}}
-  .cursor::after{content:'▋';color:var(--accent);animation:blink 1s step-end infinite;margin-left:1px}
-  @keyframes blink{50%{opacity:0}}
+  /* ---- persistent live-link bar (pinned above the composer; never scrolls away) ---- */
+  .livelink{display:flex;align-items:center;gap:11px;padding:10px 20px;border-top:1px solid var(--line);
+    background:linear-gradient(0deg,rgba(255,138,61,.07),transparent);font-family:var(--mono);font-size:12px}
+  .livelink.hidden{display:none}
+  .livelink .lbl{display:flex;align-items:center;gap:6px;color:var(--ok);font-size:10px;letter-spacing:.14em;text-transform:uppercase;white-space:nowrap}
+  .livelink .lbl .dot{width:7px;height:7px;border-radius:50%;background:var(--ok);box-shadow:0 0 8px var(--ok)}
+  .livelink .u{flex:1;min-width:0;color:var(--accent2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .livelink a.open{background:var(--accent);color:#1a1205;font-family:var(--disp);font-weight:700;font-size:12.5px;
+    padding:7px 14px;border-radius:9px;text-decoration:none;white-space:nowrap;transition:filter .15s,transform .1s}
+  .livelink a.open:hover{filter:brightness(1.08)}.livelink a.open:active{transform:translateY(1px)}
 
   .composer{padding:16px 20px;border-top:1px solid var(--line)}
   .cbox{display:flex;gap:10px;align-items:flex-end;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:9px 9px 9px 15px;transition:border-color .15s,box-shadow .15s}
@@ -355,6 +363,7 @@ export function appPage(): string {
         <p>Name a site and describe it. Forge ships it to <span class="mono">&lt;name&gt;.clydeford.net</span> on its own Cloudflare Worker, then refine it by chatting.</p>
       </div>
     </div>
+    <div class="livelink hidden" id="livelink"></div>
     <div class="composer">
       <div class="cbox">
         <textarea id="input" rows="1" placeholder="Select a site to start building…" disabled></textarea>
@@ -390,6 +399,8 @@ const APP_JS = `
   var ZONE = 'clydeford.net';
   var BUILD_VERBS = ['Forging the worker','Compiling your code','Bundling modules',
     'Wiring up routes','Shipping to the edge','Spinning up the runtime','Warming the cache'];
+  var THINK_VERBS = ['Thinking','Reading your brief','Planning the layout','Writing the code',
+    'Wiring it together','Reviewing the result'];
   var state = { active:null, busy:false, building:false, streamLost:false };
   var $ = function(id){ return document.getElementById(id); };
 
@@ -410,16 +421,38 @@ const APP_JS = `
 
   var verbTimer=null;
   function stopVerbs(){ if(verbTimer){ clearInterval(verbTimer); verbTimer=null; } }
+  // Cycle a spinner element's .verb label through a list of stage verbs (one timer at a time).
+  function startVerbs(el, verbs){
+    stopVerbs();
+    var v=el.querySelector('.verb'); if(!v) return;
+    v.textContent=verbs[0]+'…'; var vi=0;
+    verbTimer=setInterval(function(){
+      vi=(vi+1)%verbs.length;
+      v.style.opacity='0';
+      setTimeout(function(){ v.textContent=verbs[vi]+'…'; v.style.opacity='1'; }, 180);
+    }, 1100);
+  }
   function isMobile(){ return window.matchMedia('(max-width:720px)').matches; }
 
   var chat=$('chat'), input=$('input'), send=$('send'), pill=$('pill'), pillTxt=$('pillTxt');
   var hTitle=$('hTitle'), hUrl=$('hUrl'), addr=$('addr'), preview=$('preview'), noprev=$('noprev');
-  var siteList=$('siteList'), welcome=$('welcome'), openLink=$('openLink');
+  var siteList=$('siteList'), welcome=$('welcome'), openLink=$('openLink'), livelink=$('livelink');
   var stepHint=$('stepHint'), specEl=$('spec'), nameWrap=document.querySelector('#new-site .urlrow');
   var sitesPanel=$('sitesPanel'), sitesBtn=$('sitesBtn'), siteCount=$('siteCount');
   function closeSites(){ sitesPanel.classList.remove('open'); sitesBtn.classList.remove('open'); }
 
   function setPill(kind, txt){ pill.className='pill'+(kind?(' '+kind):''); pillTxt.textContent=txt; }
+
+  // Persistent live link, pinned above the composer so it can't be scrolled out of view.
+  function showLiveLink(url){
+    if(!url){ hideLiveLink(); return; }
+    var host=url.replace(/^https?:\\/\\//,'').replace(/\\/$/,'');
+    livelink.innerHTML='<span class="lbl"><span class="dot"></span>live</span>'
+      +'<span class="u" title="'+url+'">'+host+'</span>'
+      +'<a class="open" href="'+url+'" target="_blank" rel="noopener">Open ↗</a>';
+    livelink.classList.remove('hidden');
+  }
+  function hideLiveLink(){ livelink.classList.add('hidden'); livelink.innerHTML=''; }
 
   function api(path, opts){ return fetch(path, Object.assign({headers:{'content-type':'application/json'}}, opts||{})); }
 
@@ -467,6 +500,7 @@ const APP_JS = `
     setPill('','ready');
     if(welcome) welcome.remove();
     chat.innerHTML='';
+    hideLiveLink(); // cleared per-site; loadHistory→finalizeIdle re-shows it if this site is deployed
     closeSites();
     setPreview(url);
     loadSites();
@@ -493,7 +527,7 @@ const APP_JS = `
     state.building=false; state.busy=false; state.streamLost=false;
     send.disabled=false; input.disabled=false;
     if(pill.className.indexOf('live')<0) setPill('','ready');
-    if(d && d.url) setPreview(d.url);
+    if(d && d.url){ setPreview(d.url); showLiveLink(d.url); }
   }
 
   function loadHistory(name){
@@ -608,9 +642,16 @@ const APP_JS = `
     if(state.busy||!state.active) return;
     state.busy=true; state.building=true; state.streamLost=false; state.lastEventAt=Date.now(); send.disabled=true; input.disabled=true;
     var ub=bubble('user','you',Date.now()); ub.textContent=text;
-    var bb=bubble('bot','forge',Date.now()); bb.classList.add('cursor');
     setPill('work','thinking');
-    var deployEl=null;
+    var bb=null, deployEl=null;
+    // Thinking indicator: a verb spinner (replaces the old blinking cursor), shown until the
+    // model starts streaming text or a build begins. The bot bubble is created lazily on the
+    // first text token so there's never an empty bubble.
+    var thinkEl=document.createElement('div'); thinkEl.className='deploy';
+    thinkEl.innerHTML='<span class="spin"></span> <span class="verb">'+THINK_VERBS[0]+'…</span>';
+    chat.appendChild(thinkEl); chat.scrollTop=chat.scrollHeight;
+    startVerbs(thinkEl, THINK_VERBS);
+    function removeThink(){ if(thinkEl){ stopVerbs(); thinkEl.remove(); thinkEl=null; } }
 
     api('/api/sites/'+state.active+'/chat',{method:'POST',body:JSON.stringify({message:text})})
       .then(function(r){
@@ -630,19 +671,16 @@ const APP_JS = `
           });
         }
         function handle(ev){
-          if(ev.type==='text'){ bb.textContent+=ev.text; chat.scrollTop=chat.scrollHeight; }
+          if(ev.type==='text'){
+            if(!bb){ removeThink(); bb=bubble('bot','forge',Date.now()); }
+            bb.textContent+=ev.text; chat.scrollTop=chat.scrollHeight;
+          }
           else if(ev.type==='deploying'){
-            setPill('work','building');
+            removeThink(); setPill('work','building');
             deployEl=document.createElement('div'); deployEl.className='deploy';
             deployEl.innerHTML='<span class="spin"></span> <span class="verb">'+BUILD_VERBS[0]+'…</span>';
             chat.appendChild(deployEl); chat.scrollTop=chat.scrollHeight;
-            var vi=0;
-            verbTimer=setInterval(function(){
-              vi=(vi+1)%BUILD_VERBS.length;
-              var v=deployEl&&deployEl.querySelector('.verb'); if(!v) return;
-              v.style.opacity='0';
-              setTimeout(function(){ v.textContent=BUILD_VERBS[vi]+'…'; v.style.opacity='1'; }, 180);
-            }, 1100);
+            startVerbs(deployEl, BUILD_VERBS);
           }
           else if(ev.type==='provisioning'){
             // Worker is deployed, but the edge TLS cert for a brand-new
@@ -654,7 +692,7 @@ const APP_JS = `
             }
           }
           else if(ev.type==='building_project'){
-            stopVerbs(); setPill('work','building');
+            removeThink(); stopVerbs(); setPill('work','building');
             if(!window.__bl){
               window.__bl=document.createElement('div'); window.__bl.className='buildlog';
               chat.appendChild(window.__bl);
@@ -684,16 +722,16 @@ const APP_JS = `
                 +'<a class="open" href="'+ev.url+'" target="_blank" rel="noopener">Open ↗</a>';
             }
             confetti();
+            showLiveLink(ev.url); // pin the link above the composer so it never scrolls away
             setTimeout(function(){ setPreview(ev.url); }, 1200);
             window.__bl=null;
           }
-          else if(ev.type==='error'){ stopVerbs(); state.building=false; setPill('','error'); var eb=bubble('sys',''); eb.style.color='var(--err)'; eb.textContent='▲ '+ev.message; }
+          else if(ev.type==='error'){ removeThink(); stopVerbs(); state.building=false; setPill('','error'); var eb=bubble('sys',''); eb.style.color='var(--err)'; eb.textContent='▲ '+ev.message; }
         }
         function finish(){
-          stopVerbs();
+          stopVerbs(); removeThink();
           state.building=false; state.streamLost=false;
-          bb.classList.remove('cursor');
-          if(!bb.textContent) bb.textContent='(done)';
+          if(bb && !bb.textContent) bb.textContent='(done)';
           if(pill.className.indexOf('live')<0) setPill('','ready');
           state.busy=false; send.disabled=false; input.disabled=false;
           if(!isMobile()) input.focus(); // mobile: don't pop the keyboard after a turn finishes
@@ -703,7 +741,7 @@ const APP_JS = `
       .catch(function(){
         // The stream died (often a mobile app-switch / screen sleep). The build keeps
         // running server-side — rejoin and poll for the result instead of giving up.
-        stopVerbs(); bb.classList.remove('cursor');
+        stopVerbs(); removeThink();
         state.streamLost=true;
         if(state.building && state.active){ recover(); }
         else { setPill('','error'); state.busy=false; send.disabled=false; input.disabled=false; }
@@ -715,7 +753,7 @@ const APP_JS = `
     api('/api/sites/'+name,{method:'DELETE'}).then(function(){
       if(state.active===name){ state.active=null; hTitle.textContent='No site selected'; hUrl.textContent='pick or create a site →';
         addr.innerHTML='https://<b>—</b>'; setPreview(null); input.disabled=true; send.disabled=true; setPill('','idle');
-        openLink.classList.add('hidden'); document.body.classList.remove('show-chat'); }
+        openLink.classList.add('hidden'); hideLiveLink(); document.body.classList.remove('show-chat'); }
       loadSites();
     });
   }

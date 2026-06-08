@@ -55,7 +55,18 @@ Conversation flow:
 - Discuss briefly with the user, then when you have something to ship, CALL the deploy_worker tool.
 - The 'script' argument must be the ENTIRE worker file, ready to deploy as-is.
 - After deploying, summarize what you built in one or two sentences.
-- When the user asks for changes, edit the current script and deploy again.`;
+- When the user asks for changes, edit the current script and deploy again.
+
+The live URL:
+- This site is ALWAYS served at the URL given in the SITE context below. When the user asks
+  for a link, or after any successful deploy, write that full https:// URL in your reply so they
+  have a clickable link. Never say you will "redeploy so the link comes through" — you already
+  know the URL; just give it.
+- Only say you are deploying when you are actually calling a deploy tool in the same turn.
+- If the user reports the site won't load right after the FIRST deploy, it is almost certainly
+  the TLS certificate still being issued for the new subdomain (this can take a minute or two).
+  Tell them to wait a moment and refresh — do NOT redeploy, since redeploying does not speed up
+  certificate issuance.`;
 
 export const DEPLOY_PROJECT_TOOL = {
   name: "deploy_project",

@@ -19,6 +19,7 @@ export async function* streamTurn(
   env: Env,
   history: StoredMessage[],
   currentScript: string | null,
+  siteName: string,
 ): AsyncGenerator<TurnEvent> {
   const client = new Anthropic({
     apiKey: env.ANTHROPIC_API_KEY,
@@ -32,6 +33,10 @@ export async function* streamTurn(
       type: "text",
       text: SYSTEM_PROMPT,
       cache_control: { type: "ephemeral" },
+    },
+    {
+      type: "text",
+      text: `SITE context — this site is named "${siteName}" and is served live at https://${siteName}.${env.SITE_ZONE} once deployed. That is the link to give the user.`,
     },
   ];
   if (currentScript) {
