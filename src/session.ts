@@ -2,9 +2,36 @@ import { DurableObject } from "cloudflare:workers";
 import type { Env, StoredMessage } from "./types";
 import { streamTurn } from "./anthropic";
 import { deploySite, deployProject, waitUntilLive } from "./deploy";
-import { runBuild } from "./buildclient";
+import { runBuild, probeLive } from "./buildclient";
 import { syncForgeToGitHub } from "./github";
 import { logEvent } from "./logstore";
+
+// Authoritative liveness/SSL check: probe the deployed URL from inside an ephemeral
+// container (a real external HTTPS request — public DNS + TLS handshake), which a
+// same-zone Workers subrequest can't faithfully reproduce. Falls back to the in-runtime
+// fetch poll if the container is unavailable, so a probe outage never blocks a deploy.
+async function checkLive(
+  env: Env,
+  name: string,
+  url: string,
+  send: (obj: unknown) => void,
+): Promise<boolean> {
+  try {
+    const container = env.BUILD_BOX.get(env.BUILD_BOX.idFromName(name));
+    const r = await probeLive(container, url, { onPending: () => send({ type: "provisioning" }) });
+    await logEvent(
+      env,
+      name,
+      "info",
+      "provision",
+      `liveness probe (container): ${r.live ? "LIVE" : "not live within budget"} — HTTP ${r.status || "—"} in ${r.ms}ms over ${r.attempts} attempt(s)`,
+    );
+    return r.live;
+  } catch (e: any) {
+    await logEvent(env, name, "error", "provision", `container probe failed: ${String(e?.message ?? e)} — falling back to runtime fetch`);
+    return waitUntilLive(url, { onPending: () => send({ type: "provisioning" }) });
+  }
+}
 
 // Default Worker module when a project has no custom workerEntry: serve the built SPA.
 const DEFAULT_ASSETS_WORKER =
@@ -112,14 +139,11 @@ export class SiteSession extends DurableObject<Env> {
               await ctx.storage.put("script", ev.script);
               await ctx.storage.put("url", url);
               deployedThisTurn = true;
-              // Don't claim "live" until the URL actually responds. On a first
-              // deploy the edge TLS cert is still provisioning; tell the client
-              // it's pending, and report whether it came up within our window.
-              const live = await waitUntilLive(url, {
-                onPending: () => send({ type: "provisioning" }),
-              });
-              if (!live) await logEvent(env, name, "info", "provision", `TLS still provisioning for ${url}`);
-              await logEvent(env, name, "info", "deployed", `live: ${url}${live ? "" : " (provisioning)"}`);
+              // Don't claim "live" until the URL actually responds. On a first deploy the
+              // edge TLS cert is still provisioning; the container probe waits it out and
+              // reports authoritatively whether the public URL is serving.
+              const live = await checkLive(env, name, url, send);
+              await logEvent(env, name, "info", "deployed", `${live ? "live" : "deployed (still provisioning)"}: ${url}`);
               send({ type: "deployed", url, explanation: ev.explanation, provisioning: !live });
             } else if (ev.type === "deploy_project") {
               send({ type: "building_project" });
@@ -164,9 +188,8 @@ export class SiteSession extends DurableObject<Env> {
               await ctx.storage.put("script", state.currentScript);
               await ctx.storage.put("url", url);
               deployedThisTurn = true;
-              const live = await waitUntilLive(url, { onPending: () => send({ type: "provisioning" }) });
-              if (!live) await logEvent(env, name, "info", "provision", `TLS still provisioning for ${url}`);
-              await logEvent(env, name, "info", "deployed", `live: ${url}${live ? "" : " (provisioning)"}`);
+              const live = await checkLive(env, name, url, send);
+              await logEvent(env, name, "info", "deployed", `${live ? "live" : "deployed (still provisioning)"}: ${url}`);
               send({ type: "deployed", url, explanation: ev.explanation, provisioning: !live });
             }
           }

@@ -67,6 +67,44 @@ async function handleBuild(req, res) {
   }
 }
 
+// Liveness/SSL probe from inside the container: a real external HTTPS request (public
+// DNS + TLS handshake + cert validation), authoritative in a way a same-zone Workers
+// subrequest is not. Polls until the site answers (any <500) or the budget expires,
+// streaming a single {pending} after the first miss so the worker can show "provisioning".
+async function handleProbe(req, res) {
+  res.writeHead(200, { "content-type": "application/x-ndjson" });
+  const emit = (obj) => res.write(JSON.stringify(obj) + "\n");
+  try {
+    const { url, budgetMs = 150_000, intervalMs = 3_000 } = JSON.parse(await readBody(req));
+    if (!url) { emit({ type: "result", live: false, status: 0, attempts: 0, ms: 0, error: "no url" }); return res.end(); }
+    const start = Date.now();
+    const deadline = start + budgetMs;
+    let notified = false, attempts = 0, lastStatus = 0;
+    while (Date.now() < deadline) {
+      attempts++;
+      let status = 0, ok = false;
+      try {
+        const r = await fetch(url, {
+          method: "GET",
+          redirect: "manual",
+          headers: { "cache-control": "no-cache" },
+          signal: AbortSignal.timeout(10_000),
+        });
+        status = r.status; lastStatus = status;
+        ok = status < 500; // a real app response (even 404) means TLS + routing are up
+      } catch { /* TLS handshake / DNS not ready yet */ }
+      if (ok) { emit({ type: "result", live: true, status, attempts, ms: Date.now() - start }); return res.end(); }
+      if (!notified) { notified = true; emit({ type: "pending", status, attempts }); }
+      await new Promise((r) => setTimeout(r, intervalMs));
+    }
+    emit({ type: "result", live: false, status: lastStatus, attempts, ms: Date.now() - start });
+    res.end();
+  } catch (e) {
+    emit({ type: "result", live: false, status: 0, attempts: 0, ms: 0, error: String(e?.message ?? e) });
+    res.end();
+  }
+}
+
 const MAX_BODY_BYTES = 25 * 1024 * 1024;
 function readBody(req) {
   return new Promise((resolve, reject) => {
@@ -92,6 +130,13 @@ const server = createServer((req, res) => {
       if (!res.headersSent) {
         res.writeHead(500, { "content-type": "text/plain" });
       }
+      res.end(String(e?.message ?? e));
+    });
+    return;
+  }
+  if (req.method === "POST" && req.url === "/probe") {
+    handleProbe(req, res).catch((e) => {
+      if (!res.headersSent) res.writeHead(500, { "content-type": "text/plain" });
       res.end(String(e?.message ?? e));
     });
     return;

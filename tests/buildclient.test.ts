@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { runBuild } from "../src/buildclient";
+import { runBuild, probeLive } from "../src/buildclient";
 
 function ndjsonResponse(lines: object[]): Response {
   const body = lines.map((l) => JSON.stringify(l)).join("\n") + "\n";
@@ -52,4 +52,30 @@ test("runBuild parses a result on the final line with no trailing newline", asyn
   const stub = { fetch: async () => new Response(text, { headers: { "content-type": "application/x-ndjson" } }) };
   const result = await runBuild(stub as any, { siteName: "s", files: [] }, () => {});
   expect(result.ok).toBe(true);
+});
+
+test("probeLive forwards a pending then returns a live result", async () => {
+  const stub = { fetch: async () => ndjsonResponse([
+    { type: "pending", status: 0, attempts: 1 },
+    { type: "result", live: true, status: 200, ms: 240, attempts: 3 },
+  ]) };
+  let pendings = 0;
+  const r = await probeLive(stub as any, "https://x.clydeford.net", { onPending: () => pendings++ });
+  expect(pendings).toBe(1);
+  expect(r).toMatchObject({ live: true, status: 200, attempts: 3 });
+});
+
+test("probeLive returns not-live when the budget expires", async () => {
+  const stub = { fetch: async () => ndjsonResponse([
+    { type: "pending", status: 522, attempts: 1 },
+    { type: "result", live: false, status: 522, ms: 150000, attempts: 50 },
+  ]) };
+  const r = await probeLive(stub as any, "https://x.clydeford.net", {});
+  expect(r.live).toBe(false);
+  expect(r.status).toBe(522);
+});
+
+test("probeLive throws on a bodyless transport failure (so caller can fall back)", async () => {
+  const stub = { fetch: async () => new Response(null, { status: 503 }) };
+  await expect(probeLive(stub as any, "https://x.clydeford.net", {})).rejects.toThrow(/probe server/);
 });

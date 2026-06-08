@@ -74,3 +74,60 @@ export async function runBuild(
     clearTimeout(timer);
   }
 }
+
+export interface ProbeResult {
+  live: boolean;
+  status: number;
+  ms: number;
+  attempts: number;
+}
+
+// Ask the container to probe a deployed URL over real external HTTPS until it answers or
+// the budget expires. The container streams a single {pending} after the first miss
+// (forwarded via onPending) then a terminating {result}. Throws on transport failure so
+// the caller can fall back to an in-runtime check.
+export async function probeLive(
+  container: ContainerStub,
+  url: string,
+  opts: { onPending?: () => void; budgetMs?: number } = {},
+): Promise<ProbeResult> {
+  const budgetMs = opts.budgetMs ?? 150_000;
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), budgetMs + 30_000); // hard cap past the probe budget
+  try {
+    const res = await container.fetch(
+      new Request("http://buildbox/probe", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ url, budgetMs }),
+        signal: ac.signal,
+      }),
+    );
+    if (!res.body) throw new Error(`probe server returned ${res.status}`);
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let buf = "";
+    let result: ProbeResult = { live: false, status: 0, ms: 0, attempts: 0 };
+    const handle = (line: string) => {
+      let ev: any;
+      try { ev = JSON.parse(line); } catch { return; }
+      if (ev.type === "pending") opts.onPending?.();
+      else if (ev.type === "result") result = { live: !!ev.live, status: ev.status ?? 0, ms: ev.ms ?? 0, attempts: ev.attempts ?? 0 };
+    };
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      let i: number;
+      while ((i = buf.indexOf("\n")) >= 0) {
+        const line = buf.slice(0, i).trim();
+        buf = buf.slice(i + 1);
+        if (line) handle(line);
+      }
+    }
+    if (buf.trim()) handle(buf.trim());
+    return result;
+  } finally {
+    clearTimeout(timer);
+  }
+}

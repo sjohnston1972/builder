@@ -705,7 +705,8 @@ const APP_JS = `
             fb.textContent='▲ build failed: '+ev.error+'  ·  full output in Settings → logs';
           }
           else if(ev.type==='deployed'){
-            stopVerbs(); setPill('live','live');
+            // Pill must agree with the card: only claim LIVE when the probe confirmed it.
+            stopVerbs(); setPill(ev.provisioning?'':'live', ev.provisioning?'provisioning':'live');
             var host=ev.url.replace('https://','');
             if(deployEl){
               deployEl.className='announce'+(ev.provisioning?' prov':'');
