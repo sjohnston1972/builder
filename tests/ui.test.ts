@@ -31,10 +31,11 @@ test("settingsPage has the log viewer: search, site/level filters, list", () => 
 test("appPage links to the settings/logs page", () => {
   expect(appPage()).toContain('href="/settings"');
 });
-test("appPage handles framework build SSE events", () => {
+test("appPage handles framework build SSE events without dumping raw output in chat", () => {
   const html = appPage();
   expect(html).toContain("building_project");
   expect(html).toContain("build_log");
   expect(html).toContain("build_failed");
-  expect(html).toContain("buildlog");
+  // The raw npm/build output must NOT be rendered into the chat — it lives in Settings → logs.
+  expect(html).not.toContain("buildlog");
 });

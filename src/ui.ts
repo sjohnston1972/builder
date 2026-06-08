@@ -259,10 +259,6 @@ export function appPage(): string {
   .announce .open:hover{filter:brightness(1.08)}.announce .open:active{transform:translateY(1px)}
   .announce.prov{align-items:flex-start}
   .announce .note{font-family:var(--mono);font-size:11px;line-height:1.55;color:var(--accent2);margin-top:8px;white-space:normal}
-  .buildlog{align-self:flex-start;max-width:min(94%,560px);background:#0a0b0e;border:1px solid var(--line);
-    border-radius:12px;padding:10px 12px;font-family:var(--mono);font-size:11px;line-height:1.5;
-    color:var(--muted);white-space:pre-wrap;max-height:220px;overflow:auto}
-  .buildlog.fail{border-color:var(--err);color:var(--err)}
 
   /* ---- confetti burst ---- */
   .confetti{position:fixed;inset:0;pointer-events:none;z-index:60;overflow:hidden}
@@ -590,7 +586,6 @@ const APP_JS = `
   // Came back to the app (foreground / bfcache restore) after losing a build's stream.
   function recover(){
     if(!state.active || !state.building) return;
-    window.__bl=null; // detached by the chat clear below — drop the stale ref so a new build log is created
     chat.innerHTML='';
     loadHistory(state.active);
   }
@@ -693,21 +688,21 @@ const APP_JS = `
             }
           }
           else if(ev.type==='building_project'){
-            removeThink(); stopVerbs(); setPill('work','building');
-            if(!window.__bl){
-              window.__bl=document.createElement('div'); window.__bl.className='buildlog';
-              chat.appendChild(window.__bl);
-            }
-            window.__bl.textContent='Building project…\\n';
-            chat.scrollTop=chat.scrollHeight;
+            // Show a clean build spinner in the chat. The full npm/build output is NOT
+            // dumped here — it's captured in Settings → logs. build_log events still
+            // arrive (they keep the stream alive) but are not rendered.
+            removeThink(); setPill('work','building');
+            deployEl=document.createElement('div'); deployEl.className='deploy';
+            deployEl.innerHTML='<span class="spin"></span> <span class="verb">'+BUILD_VERBS[0]+'…</span>';
+            chat.appendChild(deployEl); chat.scrollTop=chat.scrollHeight;
+            startVerbs(deployEl, BUILD_VERBS);
           }
-          else if(ev.type==='build_log'){
-            if(window.__bl){ window.__bl.textContent+=ev.line+'\\n'; window.__bl.scrollTop=window.__bl.scrollHeight; }
-          }
+          else if(ev.type==='build_log'){ /* heartbeat only — full output lives in Settings → logs */ }
           else if(ev.type==='build_failed'){
             stopVerbs(); state.building=false; setPill('','error');
-            if(window.__bl){ window.__bl.className='buildlog fail'; window.__bl.textContent+='\\n▲ '+ev.error+'\\n'; }
-            window.__bl=null;
+            if(deployEl){ deployEl.remove(); deployEl=null; }
+            var fb=bubble('sys',''); fb.style.color='var(--err)';
+            fb.textContent='▲ build failed: '+ev.error+'  ·  full output in Settings → logs';
           }
           else if(ev.type==='deployed'){
             stopVerbs(); setPill('live','live');
@@ -725,7 +720,6 @@ const APP_JS = `
             confetti();
             showLiveLink(ev.url); // pin the link above the composer so it never scrolls away
             setTimeout(function(){ setPreview(ev.url); }, 1200);
-            window.__bl=null;
           }
           else if(ev.type==='error'){ removeThink(); stopVerbs(); state.building=false; setPill('','error'); var eb=bubble('sys',''); eb.style.color='var(--err)'; eb.textContent='▲ '+ev.message; }
         }
