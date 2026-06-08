@@ -711,7 +711,7 @@ const APP_JS = `
             if(deployEl){
               deployEl.className='announce'+(ev.provisioning?' prov':'');
               var note=ev.provisioning
-                ? '<div class="note">⏳ First deploy — SSL is still activating. Your site can take a few minutes to load; refresh the page if it doesn\\'t open right away.</div>'
+                ? '<div class="note">⏳ First deploy — SSL is still activating. Your site can take a few minutes to load; refresh the page if it doesn\\'t open right away.<br><br>📱 Heads up: the link may not resolve on other devices (e.g. your phone) for a minute — give it a moment before sharing, or a too-early visit can get cached as "site can\\'t be reached".</div>'
                 : '';
               deployEl.innerHTML='<span class="spark">✦</span>'
                 +'<div class="body"><div class="title">'+(ev.provisioning?'Your site is almost live':'Your site is live')+'</div>'
