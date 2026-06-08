@@ -4,6 +4,7 @@ import { streamTurn } from "./anthropic";
 import { deploySite, deployProject, waitUntilLive } from "./deploy";
 import { runBuild } from "./buildclient";
 import { syncForgeToGitHub } from "./github";
+import { logEvent } from "./logstore";
 
 // Default Worker module when a project has no custom workerEntry: serve the built SPA.
 const DEFAULT_ASSETS_WORKER =
@@ -74,6 +75,7 @@ export class SiteSession extends DurableObject<Env> {
     // without a timestamp (which getState treats as a dead/legacy turn).
     await this.ctx.storage.put("buildStartedAt", Date.now());
     await this.ctx.storage.put("status", "building");
+    await logEvent(this.env, name, "info", "turn", `turn started — prompt: ${message.slice(0, 240)}`);
 
     const env = this.env;
     const ctx = this.ctx;
@@ -103,6 +105,7 @@ export class SiteSession extends DurableObject<Env> {
               send({ type: "text", text: ev.text });
             } else if (ev.type === "deploy") {
               send({ type: "deploying" });
+              await logEvent(env, name, "info", "deploy", "deploying single-file worker");
               const url = await deploySite(env, name, ev.script);
               state.currentScript = ev.script;
               state.deployedUrl = url;
@@ -115,10 +118,20 @@ export class SiteSession extends DurableObject<Env> {
               const live = await waitUntilLive(url, {
                 onPending: () => send({ type: "provisioning" }),
               });
+              if (!live) await logEvent(env, name, "info", "provision", `TLS still provisioning for ${url}`);
+              await logEvent(env, name, "info", "deployed", `live: ${url}${live ? "" : " (provisioning)"}`);
               send({ type: "deployed", url, explanation: ev.explanation, provisioning: !live });
             } else if (ev.type === "deploy_project") {
               send({ type: "building_project" });
+              await logEvent(
+                env,
+                name,
+                "info",
+                "build",
+                `framework build started — ${ev.files.length} files, output ${ev.outputDir ?? "dist"}`,
+              );
               const container = env.BUILD_BOX.get(env.BUILD_BOX.idFromName(name));
+              let buildLog = "";
               const result = await runBuild(
                 container,
                 {
@@ -128,15 +141,20 @@ export class SiteSession extends DurableObject<Env> {
                   buildCommand: ev.buildCommand,
                   outputDir: ev.outputDir,
                 },
-                (line) => send({ type: "build_log", line }),
+                (line) => {
+                  buildLog = (buildLog + line + "\n").slice(-18000); // keep the tail (capped)
+                  send({ type: "build_log", line });
+                },
               );
               if (!result.ok || !result.assets) {
                 const errMsg = result.error ?? "build failed";
                 send({ type: "build_failed", error: errMsg });
+                await logEvent(env, name, "error", "build", `build failed: ${errMsg}\n\n--- build output ---\n${buildLog}`);
                 // Record the failure so the model can fix it next turn; keep previous deploy live.
                 assistantText += `${assistantText ? "\n" : ""}[build failed: ${errMsg}]`;
                 continue;
               }
+              await logEvent(env, name, "info", "build", `build succeeded\n\n--- build output ---\n${buildLog}`);
               const workerScript = ev.workerEntry
                 ? (ev.files.find((f: { path: string; content: string }) => f.path === ev.workerEntry)?.content ?? DEFAULT_ASSETS_WORKER)
                 : DEFAULT_ASSETS_WORKER;
@@ -147,13 +165,19 @@ export class SiteSession extends DurableObject<Env> {
               await ctx.storage.put("url", url);
               deployedThisTurn = true;
               const live = await waitUntilLive(url, { onPending: () => send({ type: "provisioning" }) });
+              if (!live) await logEvent(env, name, "info", "provision", `TLS still provisioning for ${url}`);
+              await logEvent(env, name, "info", "deployed", `live: ${url}${live ? "" : " (provisioning)"}`);
               send({ type: "deployed", url, explanation: ev.explanation, provisioning: !live });
             }
           }
+          await logEvent(env, name, "info", "model", assistantText ? `reply: ${assistantText.slice(0, 400)}` : "turn finished (deploy only)");
           state.messages.push({ role: "assistant", content: assistantText || "(deployed)", at: Date.now() });
           await ctx.storage.put("messages", state.messages);
         } catch (err: any) {
           const msg = String(err?.message ?? err);
+          // Durable error capture — write the error to the log BEFORE anything else so it can
+          // never silently vanish (the SSE 'error' is transient; a hard turn death loses it).
+          await logEvent(env, name, "error", "error", msg);
           send({ type: "error", message: msg });
           // Persist an assistant turn so the conversation reflects a finished (failed)
           // turn. This also lets getState() derive "idle" if the status write below is
@@ -169,9 +193,12 @@ export class SiteSession extends DurableObject<Env> {
           // GitHub outage must not affect the deploy. Skipped entirely if no token is set.
           if (deployedThisTurn && env.GITHUB_TOKEN && state.currentScript && state.deployedUrl) {
             ctx.waitUntil(
-              syncForgeToGitHub(env, name, state.currentScript, state.deployedUrl).catch((e) =>
-                console.error(`[github] backup failed for ${name}:`, e),
-              ),
+              syncForgeToGitHub(env, name, state.currentScript, state.deployedUrl)
+                .then((r) => logEvent(env, name, "info", "github", `mirrored to ${r.repo}`))
+                .catch((e) => {
+                  console.error(`[github] backup failed for ${name}:`, e);
+                  return logEvent(env, name, "error", "github", `GitHub backup failed: ${String(e?.message ?? e)}`);
+                }),
             );
           }
           try {

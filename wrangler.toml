@@ -40,3 +40,11 @@ class_name = "BuildBox"
 [[migrations]]
 tag = "v2"
 new_sqlite_classes = ["BuildBox"]
+
+[[durable_objects.bindings]]
+name = "LOG_STORE"
+class_name = "LogStore"
+
+[[migrations]]
+tag = "v3"
+new_sqlite_classes = ["LogStore"]

@@ -34,6 +34,30 @@ test("unauthed api still 401s", async () => {
   expect(res.status).toBe(401);
 });
 
+test("/settings + /api/logs require auth, and logs are filterable by site", async () => {
+  // Unauthed: page redirects to login, api 401s.
+  const pageNoAuth = await SELF.fetch("https://builder.clydeford.net/settings", { redirect: "manual" });
+  expect(pageNoAuth.status).toBe(302);
+  expect((await SELF.fetch("https://builder.clydeford.net/api/logs")).status).toBe(401);
+
+  const cookie = await login();
+  // Seed a couple of log entries directly via the LogStore DO.
+  const ls = env.LOG_STORE.get(env.LOG_STORE.idFromName("global"));
+  await ls.append({ ts: 10, site: "alpha", level: "info", stage: "turn", msg: "alpha started" });
+  await ls.append({ ts: 20, site: "beta", level: "error", stage: "build", msg: "beta OOM killed" });
+
+  const page = await SELF.fetch("https://builder.clydeford.net/settings", { headers: { cookie } });
+  expect(page.status).toBe(200);
+  expect(await page.text()).toContain('id="logs"');
+
+  const filtered = await (
+    await SELF.fetch("https://builder.clydeford.net/api/logs?site=beta&level=error", { headers: { cookie } })
+  ).json<{ entries: { site: string; msg: string }[]; sites: string[] }>();
+  expect(filtered.entries.every((e) => e.site === "beta")).toBe(true);
+  expect(filtered.entries.some((e) => e.msg.includes("OOM"))).toBe(true);
+  expect(filtered.sites).toEqual(expect.arrayContaining(["alpha", "beta"]));
+});
+
 test("login then create + list site", async () => {
   const cookie = await login();
   const create = await SELF.fetch("https://builder.clydeford.net/api/sites", {

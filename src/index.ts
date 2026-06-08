@@ -1,5 +1,5 @@
 import type { Env, SiteRecord } from "./types";
-import { appPage, loginPage, landingPage } from "./ui";
+import { appPage, loginPage, landingPage, settingsPage } from "./ui";
 import {
   checkAnyPassword,
   signSession,
@@ -13,6 +13,7 @@ import { deleteSite } from "./deploy";
 
 export { SiteSession } from "./session";
 export { BuildBox } from "./buildbox";
+export { LogStore } from "./logstore";
 
 const json = (data: unknown, status = 200) =>
   new Response(JSON.stringify(data), {
@@ -72,6 +73,24 @@ export default {
     if (!ok) {
       if (path.startsWith("/api/")) return json({ error: "unauthorized" }, 401);
       return new Response(null, { status: 302, headers: { location: "/login" } });
+    }
+
+    // Settings / logs page + its data feed (forge process logs, searchable + filterable).
+    if (path === "/settings" && req.method === "GET") {
+      return new Response(settingsPage(), { headers: { "content-type": "text/html" } });
+    }
+    if (path === "/api/logs" && req.method === "GET") {
+      const ls = env.LOG_STORE.get(env.LOG_STORE.idFromName("global"));
+      const [entries, sites] = await Promise.all([
+        ls.query({
+          site: url.searchParams.get("site") || undefined,
+          level: (url.searchParams.get("level") as "info" | "error" | "all") || undefined,
+          q: url.searchParams.get("q") || undefined,
+          limit: 500,
+        }),
+        ls.sites(),
+      ]);
+      return json({ entries, sites });
     }
 
     if (path === "/api/sites" && req.method === "GET") {

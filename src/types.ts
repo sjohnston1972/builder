@@ -3,6 +3,7 @@ import type { SiteSession } from "./session";
 export interface Env {
   SITE_SESSION: DurableObjectNamespace<SiteSession>;
   BUILD_BOX: DurableObjectNamespace<import("./buildbox").BuildBox>;
+  LOG_STORE: DurableObjectNamespace<import("./logstore").LogStore>;
   SITES: KVNamespace;
   CF_ACCOUNT_ID: string;
   ZONE_ID: string;

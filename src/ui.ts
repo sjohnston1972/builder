@@ -326,6 +326,7 @@ export function appPage(): string {
     <div class="brand">
       <a class="mark" href="/" title="Back to the forge">for<b>ge</b></a>
       <div class="brand-actions">
+        <a class="logout" href="/settings" title="Logs &amp; settings">settings</a>
         <a class="logout" href="/logout" title="Log out">log out</a>
       </div>
       <div class="sub">clydeford · worker builder</div>
@@ -828,5 +829,104 @@ const APP_JS = `
 
   refreshOnboarding(); // show step 1 immediately, before the sites list loads
   loadSites();
+})();
+`;
+
+// ---- Settings / logs page (dedicated route at /settings) ----
+export function settingsPage(): string {
+  return `<!doctype html><html lang="en"><head>${HEAD}<title>forge · logs</title><style>${RESET}
+  body{display:block;height:100vh;overflow:hidden;display:flex;flex-direction:column}
+  .lbar{display:flex;align-items:center;gap:12px;padding:16px 24px;border-bottom:1px solid var(--line)}
+  .lbar .mark{font-family:var(--disp);font-weight:800;font-size:21px;letter-spacing:-.02em;text-decoration:none;color:var(--text)}
+  .lbar .mark b{color:var(--accent)}
+  .lbar .crumb{font-family:var(--mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted)}
+  .lbar .spacer{flex:1}
+  .lbar a.back{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);
+    text-decoration:none;border:1px solid var(--line);padding:7px 12px;border-radius:8px;transition:color .15s,border-color .15s}
+  .lbar a.back:hover{color:var(--accent);border-color:var(--accent)}
+  .controls{display:flex;align-items:center;gap:10px;padding:14px 24px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+  .controls input,.controls select{background:var(--bg);border:1px solid var(--line);color:var(--text);border-radius:9px;
+    padding:9px 12px;font-size:13px;font-family:var(--mono);outline:none}
+  .controls input{flex:1;min-width:200px}
+  .controls input:focus,.controls select:focus{border-color:var(--accent)}
+  .controls .count{font-family:var(--mono);font-size:11px;color:var(--muted);margin-left:auto}
+  .controls button{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);
+    border:1px solid var(--line);padding:9px 14px;border-radius:9px;transition:color .15s,border-color .15s}
+  .controls button:hover{color:var(--accent);border-color:var(--accent)}
+  .loglist{flex:1;overflow:auto;padding:16px 24px;display:flex;flex-direction:column;gap:10px}
+  .loglist .empty{color:var(--muted);font-family:var(--mono);font-size:13px;text-align:center;padding:40px}
+  .entry{border:1px solid var(--line);border-radius:10px;padding:10px 13px;background:var(--panel)}
+  .entry.err{border-color:rgba(255,107,107,.5);background:rgba(255,107,107,.05)}
+  .entry .meta{display:flex;align-items:center;gap:12px;font-family:var(--mono);font-size:11px;flex-wrap:wrap}
+  .entry .meta .t{color:var(--accent2)}
+  .entry .meta .site{color:var(--text);font-weight:700}
+  .entry .meta .lvl{text-transform:uppercase;letter-spacing:.1em;font-size:9.5px;padding:2px 7px;border-radius:99px;border:1px solid var(--line);color:var(--muted)}
+  .entry .meta .lvl.error{color:var(--err);border-color:rgba(255,107,107,.5)}
+  .entry .meta .lvl.info{color:var(--ok);border-color:rgba(126,224,168,.4)}
+  .entry .meta .stage{color:var(--muted);letter-spacing:.1em;text-transform:uppercase;font-size:9.5px}
+  .entry .msg{font-family:var(--mono);font-size:12px;line-height:1.5;color:var(--text);white-space:pre-wrap;word-break:break-word;
+    margin-top:8px;max-height:260px;overflow:auto}
+  .entry .msg:empty{display:none}
+  </style></head><body>
+    <div class="lbar">
+      <a class="mark" href="/">for<b>ge</b></a><span class="crumb">· logs</span>
+      <div class="spacer"></div>
+      <a class="back" href="/">← back to forge</a>
+    </div>
+    <div class="controls">
+      <input id="q" placeholder="Search logs (message, stage, site)…" autocomplete="off" />
+      <select id="site"><option value="">all sites</option></select>
+      <select id="level"><option value="all">all levels</option><option value="info">info</option><option value="error">errors</option></select>
+      <button id="refresh" type="button">refresh</button>
+      <span class="count" id="count"></span>
+    </div>
+    <div class="loglist" id="logs"></div>
+    <script>${LOGS_JS}</script>
+  </body></html>`;
+}
+
+// Client logic for the logs page. No backticks / no \${...} so it can live in the template.
+const LOGS_JS = `
+(function(){
+  var q=document.getElementById('q'), siteSel=document.getElementById('site'),
+      levelSel=document.getElementById('level'), logsEl=document.getElementById('logs'),
+      countEl=document.getElementById('count');
+  var sitesLoaded=false;
+  function esc(s){ return String(s).replace(/[&<>]/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c]; }); }
+  function fmt(ts){ try{ return new Date(ts).toLocaleString([], {month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}); }catch(e){ return ''+ts; } }
+  function render(data){
+    var entries=(data&&data.entries)||[];
+    countEl.textContent=entries.length+' entries';
+    if(!sitesLoaded && data && data.sites){
+      data.sites.forEach(function(s){ var o=document.createElement('option'); o.value=s; o.textContent=s; siteSel.appendChild(o); });
+      sitesLoaded=true;
+    }
+    if(!entries.length){ logsEl.innerHTML='<div class="empty">No matching log entries.</div>'; return; }
+    logsEl.innerHTML='';
+    entries.forEach(function(e){
+      var row=document.createElement('div'); row.className='entry'+(e.level==='error'?' err':'');
+      row.innerHTML='<div class="meta"><span class="t">'+fmt(e.ts)+'</span>'
+        +'<span class="site">'+esc(e.site)+'</span>'
+        +'<span class="lvl '+esc(e.level)+'">'+esc(e.level)+'</span>'
+        +'<span class="stage">'+esc(e.stage)+'</span></div>'
+        +'<pre class="msg">'+esc(e.msg)+'</pre>';
+      logsEl.appendChild(row);
+    });
+  }
+  function load(){
+    var p=new URLSearchParams();
+    if(q.value.trim()) p.set('q', q.value.trim());
+    if(siteSel.value) p.set('site', siteSel.value);
+    if(levelSel.value && levelSel.value!=='all') p.set('level', levelSel.value);
+    fetch('/api/logs?'+p.toString(),{headers:{'accept':'application/json'}})
+      .then(function(r){ return r.json(); }).then(render)
+      .catch(function(){ logsEl.innerHTML='<div class="empty">Failed to load logs.</div>'; });
+  }
+  var t=null;
+  q.addEventListener('input', function(){ clearTimeout(t); t=setTimeout(load, 250); });
+  siteSel.addEventListener('change', load);
+  levelSel.addEventListener('change', load);
+  document.getElementById('refresh').addEventListener('click', load);
+  load();
 })();
 `;
