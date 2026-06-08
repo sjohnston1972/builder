@@ -19,6 +19,7 @@ export interface Env {
 export interface StoredMessage {
   role: "user" | "assistant";
   content: string;
+  at?: number; // epoch ms the message was recorded (absent on legacy messages)
 }
 
 export interface SiteRecord {

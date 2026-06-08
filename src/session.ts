@@ -65,7 +65,7 @@ export class SiteSession extends DurableObject<Env> {
   async fetch(req: Request): Promise<Response> {
     const { name, message } = await req.json<{ name: string; message: string }>();
     const state = await this.getState();
-    state.messages.push({ role: "user", content: message });
+    state.messages.push({ role: "user", content: message, at: Date.now() });
     // Persist the user's message and a "building" flag up front, so a client that
     // reconnects mid-build (mobile app-switch, screen sleep, reload) can see the
     // turn is in progress and poll for the result.
@@ -150,7 +150,7 @@ export class SiteSession extends DurableObject<Env> {
               send({ type: "deployed", url, explanation: ev.explanation, provisioning: !live });
             }
           }
-          state.messages.push({ role: "assistant", content: assistantText || "(deployed)" });
+          state.messages.push({ role: "assistant", content: assistantText || "(deployed)", at: Date.now() });
           await ctx.storage.put("messages", state.messages);
         } catch (err: any) {
           const msg = String(err?.message ?? err);
@@ -158,7 +158,7 @@ export class SiteSession extends DurableObject<Env> {
           // Persist an assistant turn so the conversation reflects a finished (failed)
           // turn. This also lets getState() derive "idle" if the status write below is
           // interrupted by a client disconnect.
-          state.messages.push({ role: "assistant", content: assistantText ? `${assistantText}\n[error: ${msg}]` : `[error: ${msg}]` });
+          state.messages.push({ role: "assistant", content: assistantText ? `${assistantText}\n[error: ${msg}]` : `[error: ${msg}]`, at: Date.now() });
           await ctx.storage.put("messages", state.messages);
         } finally {
           // Mark the turn done regardless of how it ended, so reconnecting clients

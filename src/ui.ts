@@ -67,7 +67,7 @@ export function landingPage(): string {
   </style></head><body>
     <div class="wrap">
       <nav>
-        <div class="mark">⬡ for<b>ge</b></div>
+        <div class="mark">for<b>ge</b></div>
         <a class="enter" href="/login">Enter →</a>
       </nav>
       <section class="hero">
@@ -86,7 +86,7 @@ export function landingPage(): string {
         <div class="step"><div class="n">2</div><h3>Describe it</h3><p>Write a short brief of the site you want. A landing page, a tool, an AI-powered app — whatever.</p></div>
         <div class="step"><div class="n">3</div><h3>Ship &amp; refine</h3><p>Forge deploys it in seconds, then keeps editing it live as you chat. Your conversation is saved for next time.</p></div>
       </section>
-      <footer><span>⬡ forge · clydeford.net</span><span>built on Cloudflare Workers</span></footer>
+      <footer><span>forge · clydeford.net</span><span>built on Cloudflare Workers</span></footer>
     </div>
   </body></html>`;
 }
@@ -112,7 +112,7 @@ export function loginPage(error?: string): string {
   .err{margin-top:16px;color:var(--err);font-family:var(--mono);font-size:12px;text-align:center}
   </style></head><body>
     <form class="card" method="POST" action="/login">
-      <div class="mark">⬡ for<b>ge</b></div>
+      <div class="mark">for<b>ge</b></div>
       <div class="sub">worker site builder</div>
       <label for="p">passphrase</label>
       <input id="p" name="password" type="password" autofocus autocomplete="current-password" />
@@ -137,20 +137,20 @@ export function appPage(): string {
   .brand{padding:20px 22px 16px;border-bottom:1px solid var(--line);display:grid;grid-template-columns:1fr auto;align-items:center;column-gap:10px;row-gap:5px;position:relative}
   .brand .sub{grid-column:1 / -1}
   .brand-actions{display:flex;align-items:center;gap:8px}
-  .sites-btn{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);
-    border:1px solid var(--line);padding:6px 10px;border-radius:8px;display:flex;align-items:center;gap:6px;white-space:nowrap;transition:color .15s,border-color .15s}
-  .sites-btn:hover,.sites-btn.open{color:var(--accent);border-color:var(--accent)}
-  .sites-btn .cnt{background:var(--line);color:var(--text);border-radius:99px;padding:1px 6px;font-size:9.5px;min-width:16px;text-align:center}
-  .sites-btn:hover .cnt,.sites-btn.open .cnt{background:var(--accent);color:#1a1205}
+  .sites-wrap{position:relative;margin-top:10px}
+  .sites-list-btn .cnt{background:rgba(26,18,5,.18);color:#1a1205;border-radius:99px;padding:1px 7px;font-size:11px;
+    min-width:18px;text-align:center;font-family:var(--mono);font-weight:700}
   .brand a.logout{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);
     text-decoration:none;border:1px solid var(--line);padding:6px 10px;border-radius:8px;white-space:nowrap;transition:color .15s,border-color .15s}
   .brand a.logout:hover{color:var(--accent);border-color:var(--accent)}
-  .sites-panel{position:absolute;top:100%;left:0;right:0;margin-top:2px;z-index:40;background:var(--panel2);
+  .sites-panel{position:absolute;bottom:100%;left:0;right:0;margin-bottom:6px;z-index:40;background:var(--panel2);
     border:1px solid var(--line);border-radius:12px;box-shadow:0 28px 70px -26px rgba(0,0,0,.85);
     max-height:min(62vh,440px);overflow:auto;padding:10px;display:none}
   .sites-panel.open{display:block}
   .sites-panel h2{font-family:var(--mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);margin:6px 8px 10px}
   .brand .mark{font-family:var(--disp);font-weight:800;font-size:23px;letter-spacing:-.02em}
+  .brand a.mark{text-decoration:none;color:var(--text);cursor:pointer;transition:color .12s}
+  .brand a.mark:hover{color:var(--accent)}
   .brand .mark b{color:var(--accent)}
   .brand .sub{font-family:var(--mono);font-size:9.5px;color:var(--muted);letter-spacing:.2em;text-transform:uppercase;margin-top:3px}
 
@@ -225,7 +225,8 @@ export function appPage(): string {
   .welcome .big b{color:var(--accent)}
   .welcome p{font-size:14px;line-height:1.7}
   .msg{max-width:82%;display:flex;flex-direction:column;gap:5px}
-  .msg .who{font-family:var(--mono);font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+  .msg .who{font-family:var(--mono);font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);display:flex;align-items:baseline;gap:7px}
+  .msg .who .ts{opacity:.6;letter-spacing:.06em}
   .msg .bub{padding:13px 16px;border-radius:14px;font-size:14.5px;line-height:1.62;white-space:pre-wrap;word-break:break-word}
   .msg.user{align-self:flex-end;align-items:flex-end}
   .msg.user .bub{background:var(--accent);color:#1a1205;border-bottom-right-radius:5px;font-weight:500}
@@ -315,16 +316,11 @@ export function appPage(): string {
 
   <aside>
     <div class="brand">
-      <div class="mark">⬡ for<b>ge</b></div>
+      <a class="mark" href="/" title="Back to the forge">for<b>ge</b></a>
       <div class="brand-actions">
-        <button class="sites-btn" id="sitesBtn" type="button">sites <span class="cnt" id="siteCount">0</span></button>
         <a class="logout" href="/logout" title="Log out">log out</a>
       </div>
       <div class="sub">clydeford · worker builder</div>
-      <div class="sites-panel" id="sitesPanel">
-        <h2>your sites</h2>
-        <div id="siteList"><div class="empty">No sites yet. Name one and describe it above to forge your first.</div></div>
-      </div>
     </div>
     <form class="new" id="new-site" autocomplete="off">
       <h2>+ new site</h2>
@@ -335,6 +331,13 @@ export function appPage(): string {
       </div>
       <label class="field"><textarea id="spec" placeholder="Describe the site to build — e.g. a neon retro landing page for a synthwave band with an email signup."></textarea></label>
       <button class="forge-btn" type="submit" id="createBtn">⚒ Forge it</button>
+      <div class="sites-wrap">
+        <button class="forge-btn sites-list-btn" id="sitesBtn" type="button">site list <span class="cnt" id="siteCount">0</span></button>
+        <div class="sites-panel" id="sitesPanel">
+          <h2>your sites</h2>
+          <div id="siteList"><div class="empty">No sites yet. Name one and describe it above to forge your first.</div></div>
+        </div>
+      </div>
     </form>
   </aside>
 
@@ -473,8 +476,8 @@ const APP_JS = `
 
   function renderHistory(messages){
     messages.forEach(function(m){
-      if(m.role==='user'){ bubble('user','you').textContent=m.content; }
-      else if(m.content && m.content!=='(deployed)'){ bubble('bot','forge').textContent=m.content; }
+      if(m.role==='user'){ bubble('user','you',m.at).textContent=m.content; }
+      else if(m.content && m.content!=='(deployed)'){ bubble('bot','forge',m.at).textContent=m.content; }
       else { sysLine('▸ deployed'); }
     });
   }
@@ -569,9 +572,15 @@ const APP_JS = `
     preview.src=url+'?t='+Date.now();
   }
 
-  function bubble(kind, who){
+  function fmtTime(ts){
+    try{ return new Date(ts).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', hour12:false}); }
+    catch(e){ return ''; }
+  }
+  function bubble(kind, who, at){
     var m=document.createElement('div'); m.className='msg '+kind;
     var w=document.createElement('div'); w.className='who'; w.textContent=who;
+    if(at){ var t=document.createElement('span'); t.className='ts'; t.textContent=fmtTime(at);
+      t.title=new Date(at).toLocaleString(); w.appendChild(t); }
     var b=document.createElement('div'); b.className='bub';
     if(kind!=='sys') m.appendChild(w);
     m.appendChild(b); chat.appendChild(m); chat.scrollTop=chat.scrollHeight;
@@ -598,8 +607,8 @@ const APP_JS = `
   function sendMessage(text){
     if(state.busy||!state.active) return;
     state.busy=true; state.building=true; state.streamLost=false; state.lastEventAt=Date.now(); send.disabled=true; input.disabled=true;
-    var ub=bubble('user','you'); ub.textContent=text;
-    var bb=bubble('bot','forge'); bb.classList.add('cursor');
+    var ub=bubble('user','you',Date.now()); ub.textContent=text;
+    var bb=bubble('bot','forge',Date.now()); bb.classList.add('cursor');
     setPill('work','thinking');
     var deployEl=null;
 
